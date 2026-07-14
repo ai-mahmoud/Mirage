@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# generated at runtime, not source
+backend/backend.db
+backend/reports/
+ai/*.db
