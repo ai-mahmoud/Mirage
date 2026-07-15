@@ -6,10 +6,11 @@ An `InterviewSessionRow` represents one interview session record: its
 identity (candidate/observer/position/department/interview type), its
 lifecycle (status "active" | "ended", created_at, ended_at), and a cached
 mirror of the ai/ service's latest SessionSnapshot — trust_overall,
-evidence_confidence, recommendation_confidence, recommendation_status,
-recommendation_label, current_risk, executive_summary — so the Live
-Session and Report screens can be served without re-calling the AI
-service on every read.
+trust_dimensions (the 6-dimension breakdown, as the raw list of camelCase
+dicts ai/ returns), evidence_confidence, recommendation_confidence,
+recommendation_status, recommendation_label, current_risk,
+executive_summary — so the Live Session, Dashboard, and Report screens can
+all be served without re-calling the AI service on every read.
 
 An `EvidenceRow` represents one EvidenceCard mirrored from the ai/
 service, keyed by the ai/ service's own evidence id (`ai_evidence_id`) so
@@ -21,7 +22,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, String, create_engine
+from sqlalchemy import JSON, Column, DateTime, Float, ForeignKey, String, create_engine
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -59,6 +60,7 @@ class InterviewSessionRow(Base):
     ended_at = Column(DateTime, nullable=True)
 
     trust_overall = Column(Float, nullable=False, default=75.0)
+    trust_dimensions = Column(JSON, nullable=False, default=list)
     evidence_confidence = Column(Float, nullable=False, default=0.0)
     recommendation_confidence = Column(Float, nullable=False, default=0.0)
     recommendation_status = Column(String, nullable=False, default="evidence_insufficient")
@@ -67,6 +69,10 @@ class InterviewSessionRow(Base):
     executive_summary = Column(String, nullable=True)
 
     evidence = relationship("EvidenceRow", back_populates="session", order_by="EvidenceRow.timestamp")
+
+    @property
+    def evidence_count(self) -> int:
+        return len(self.evidence)
 
 
 class EvidenceRow(Base):
@@ -83,6 +89,7 @@ class EvidenceRow(Base):
     polarity = Column(String, nullable=False)  # "supports_trust" | "reduces_trust" | "informational"
     confidence = Column(Float, nullable=False)
     timestamp = Column(DateTime, nullable=False)
+    supporting_signals = Column(JSON, nullable=False, default=list)
 
     session = relationship("InterviewSessionRow", back_populates="evidence")
 

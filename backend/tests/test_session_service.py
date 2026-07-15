@@ -58,6 +58,7 @@ def test_record_events_mirrors_trust_and_evidence(db, ai):
             "polarity": "reduces_trust",
             "confidence": 0.7,
             "timestamp": 0.0,
+            "supportingSignals": ["SIG-008", "SIG-009"],
         },
     )
     events = [RawEventIn(type="mouse_move", t=float(i), x=0.0, y=0.0) for i in range(30)]
@@ -67,6 +68,9 @@ def test_record_events_mirrors_trust_and_evidence(db, ai):
     assert status.trust_overall == 30.0
     assert status.recommendation.status == "manual_review_recommended"
     assert [e.id for e in status.evidence] == ["EV-1"]
+    assert status.evidence[0].supporting_signals == ["SIG-008", "SIG-009"]
+    assert len(status.trust_dna.dimensions) == 6
+    assert status.trust_dna.overall == 30.0
 
 
 def test_record_events_is_idempotent_on_evidence_id(db, ai):
@@ -102,3 +106,19 @@ def test_build_report_caches_executive_summary(db, ai):
     report = session_service.build_report(db, ai, row.session_id)
     assert report["executiveSummary"] == "Fake summary."
     assert db.get(type(row), row.session_id).executive_summary == "Fake summary."
+
+
+def test_report_out_returns_structured_report(db, ai):
+    row = session_service.create_session(db, ai, _payload())
+    report = session_service.report_out(db, ai, row.session_id)
+    assert report.executive_summary == "Fake summary."
+    assert len(report.trust_dna.dimensions) == 6
+    assert report.privacy_statement
+
+
+def test_list_sessions_returns_all_most_recent_first(db, ai):
+    first = session_service.create_session(db, ai, _payload(candidate_name="Ada"))
+    second = session_service.create_session(db, ai, _payload(candidate_name="Bo"))
+    rows = session_service.list_sessions(db)
+    assert [r.session_id for r in rows] == [second.session_id, first.session_id]
+    assert rows[0].evidence_count == 0

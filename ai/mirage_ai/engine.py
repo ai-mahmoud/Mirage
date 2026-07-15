@@ -183,6 +183,7 @@ class SessionEngine:
         self._last_status: str | None = None
         self._last_tick_ms: float | None = None
         self._last_snapshot: SessionSnapshot | None = None
+        self._final_report: SessionReport | None = None
 
         self._timeline.append(
             TimelineEvent(t=self.started_at, type="session_started", label="Session started")
@@ -711,8 +712,18 @@ class SessionEngine:
         Trust DNA, compute confidence, recommend — and return the resulting
         SessionSnapshot. Throttled by cfg.tick_min_interval_ms: calling it
         again almost immediately just replays the last snapshot rather than
-        recomputing.
+        recomputing. An ended session is immutable: further ticks (e.g. a
+        client still polling after finalize()) always replay its final
+        snapshot rather than recomputing against buffers that are now
+        arbitrarily stale relative to `now`.
         """
+        if self.ended_at is not None:
+            cached = self._last_snapshot
+            if cached is not None and cached.status != "ended":
+                cached = cached.model_copy(update={"status": "ended"})
+                self._last_snapshot = cached
+            return cached
+
         now = now if now is not None else time.time() * 1000.0
         cfg = self.config
 
@@ -775,8 +786,14 @@ class SessionEngine:
         """finalize: [Number] -> SessionReport
         Purpose: run one last tick, mark the session ended, and build the
         immutable SessionReport (executive summary + Trust DNA history +
-        the fixed privacy statement) for the Report/Export screen.
+        the fixed privacy statement) for the Report/Export screen. Calling
+        it again after the session has already ended (a re-opened report,
+        a repeat PDF export) just replays the original report — it never
+        re-finalizes with a new, unrelated "now".
         """
+        if self.ended_at is not None:
+            return self._final_report
+
         now = now if now is not None else time.time() * 1000.0
         snapshot = self.tick(now)
         self.ended_at = now
@@ -789,7 +806,7 @@ class SessionEngine:
             f"Current recommendation: {snapshot.recommendation.label}."
         )
 
-        return SessionReport(
+        self._final_report = SessionReport(
             session_id=self.session_id,
             candidate_name=self.candidate_name,
             observer_name=self.observer_name,
@@ -806,7 +823,7 @@ class SessionEngine:
             confidence=snapshot.confidence,
             recommendation=snapshot.recommendation,
             evidence=snapshot.evidence,
-            timeline=snapshot.timeline,
+            timeline=list(self._timeline),  # not snapshot.timeline — that was captured before "session_ended" below
             privacy_statement=[
                 "No keystroke content, clipboard data, audio, or persistent video was collected.",
                 "Only interaction metadata was analyzed: cursor movement, timing, focus, and scroll dynamics.",
@@ -814,3 +831,4 @@ class SessionEngine:
                 "A human reviewer makes the final hiring decision — this report is advisory only.",
             ],
         )
+        return self._final_report

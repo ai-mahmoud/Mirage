@@ -26,7 +26,16 @@ from sqlalchemy.orm import Session as DBSession
 
 from .ai_client import AiClient
 from .database import EvidenceRow, InterviewSessionRow, now_utc
-from .schemas import EvidenceOut, RecommendationOut, RawEventIn, SessionCreate, TrustStatusResponse
+from .schemas import (
+    EvidenceOut,
+    RecommendationOut,
+    RawEventIn,
+    SessionCreate,
+    SessionReportOut,
+    TrustDimensionOut,
+    TrustDnaOut,
+    TrustStatusResponse,
+)
 
 
 class SessionNotFound(Exception):
@@ -91,17 +100,18 @@ def record_events(db: DBSession, ai: AiClient, session_id: str, events: list[Raw
     """
     row = _get_or_raise(db, session_id)
     snapshot = ai.post_events(row.ai_session_id, [_event_to_wire(e) for e in events])
-    _apply_snapshot(db, row, snapshot)
+    apply_snapshot(db, row, snapshot)
     return snapshot
 
 
-def _apply_snapshot(db: DBSession, row: InterviewSessionRow, snapshot: dict) -> None:
-    """_apply_snapshot: DBSession InterviewSessionRow dict -> Void
+def apply_snapshot(db: DBSession, row: InterviewSessionRow, snapshot: dict) -> None:
+    """apply_snapshot: DBSession InterviewSessionRow dict -> Void
     Purpose: mirror an ai/ SessionSnapshot dict onto `row`, inserting any
     evidence cards not already persisted. Idempotent on evidence id: mirroring
     the same snapshot twice never duplicates an EvidenceRow.
     """
     row.trust_overall = snapshot["trustDna"]["overall"]
+    row.trust_dimensions = snapshot["trustDna"]["dimensions"]
     row.evidence_confidence = snapshot["confidence"]["evidenceConfidence"]
     row.recommendation_confidence = snapshot["confidence"]["recommendationConfidence"]
     row.recommendation_status = snapshot["recommendation"]["status"]
@@ -123,6 +133,7 @@ def _apply_snapshot(db: DBSession, row: InterviewSessionRow, snapshot: dict) -> 
                 polarity=card["polarity"],
                 confidence=card["confidence"],
                 timestamp=datetime.fromtimestamp(card["timestamp"] / 1000.0, tz=timezone.utc),
+                supporting_signals=card.get("supportingSignals", []),
             )
         )
     db.commit()
@@ -142,6 +153,7 @@ def evidence_row_to_out(row: EvidenceRow) -> EvidenceOut:
         polarity=row.polarity,
         confidence=row.confidence,
         timestamp=row.timestamp,
+        supporting_signals=row.supporting_signals or [],
     )
 
 
@@ -152,11 +164,16 @@ def current_status(db: DBSession, ai: AiClient, session_id: str) -> TrustStatusR
     """
     row = _get_or_raise(db, session_id)
     snapshot = ai.get_snapshot(row.ai_session_id)
-    _apply_snapshot(db, row, snapshot)
+    apply_snapshot(db, row, snapshot)
     rec = snapshot["recommendation"]
+    dna = snapshot["trustDna"]
     return TrustStatusResponse(
         session_id=row.session_id,
         trust_overall=row.trust_overall,
+        trust_dna=TrustDnaOut(
+            dimensions=[TrustDimensionOut.model_validate(d) for d in dna["dimensions"]],
+            overall=dna["overall"],
+        ),
         evidence_confidence=row.evidence_confidence,
         recommendation_confidence=row.recommendation_confidence,
         current_risk=row.current_risk,
@@ -171,13 +188,22 @@ def current_status(db: DBSession, ai: AiClient, session_id: str) -> TrustStatusR
     )
 
 
+def list_sessions(db: DBSession) -> list[InterviewSessionRow]:
+    """list_sessions: DBSession -> (list-of InterviewSessionRow)
+    Purpose: every session on record, most recently created first — the
+    Dashboard's sole data source (KPIs, charts, and activity feed are all
+    derived from this list client-side; see frontend/src/lib/session-mappers.ts).
+    """
+    return db.query(InterviewSessionRow).order_by(InterviewSessionRow.created_at.desc()).all()
+
+
 def end_session(db: DBSession, ai: AiClient, session_id: str) -> InterviewSessionRow:
     """end_session: DBSession AiClient String -> InterviewSessionRow
     Purpose: pull one final snapshot, mark the session ended, and persist it.
     """
     row = _get_or_raise(db, session_id)
     snapshot = ai.get_snapshot(row.ai_session_id)
-    _apply_snapshot(db, row, snapshot)
+    apply_snapshot(db, row, snapshot)
     row.status = "ended"
     row.ended_at = now_utc()
     db.commit()
@@ -196,3 +222,12 @@ def build_report(db: DBSession, ai: AiClient, session_id: str) -> dict:
     row.executive_summary = report["executiveSummary"]
     db.commit()
     return report
+
+
+def report_out(db: DBSession, ai: AiClient, session_id: str) -> SessionReportOut:
+    """report_out: DBSession AiClient String -> SessionReportOut
+    Purpose: the Report screen's JSON view — build_report's dict already
+    has the same camelCase shape as SessionReportOut's aliases, so no
+    manual field mapping is needed.
+    """
+    return SessionReportOut.model_validate(build_report(db, ai, session_id))

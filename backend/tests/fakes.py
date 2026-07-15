@@ -81,12 +81,23 @@ class FakeAiClient:
             status, label = "manual_review_recommended", "Manual Review Recommended"
         else:
             status, label = "continue_monitoring", "Continue Monitoring"
+        dimensions = [
+            {"id": dim_id, "label": dim_id.replace("_", " ").title(), "score": overall, "confidence": 1.0, "trend": "stable"}
+            for dim_id in (
+                "behavioral_consistency",
+                "interaction_naturalness",
+                "attention_stability",
+                "context_integrity",
+                "adaptive_responsiveness",
+                "session_authenticity",
+            )
+        ]
         return {
             "sessionId": ai_session_id,
             "status": "live",
             "startedAt": 0.0,
             "elapsedMs": float(events),
-            "trustDna": {"dimensions": [], "overall": overall},
+            "trustDna": {"dimensions": dimensions, "overall": overall},
             "liveSignals": [],
             "evidence": state["evidence"],
             "confidence": {"evidenceConfidence": 0.9, "recommendationConfidence": 0.9, "drivers": []},

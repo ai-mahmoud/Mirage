@@ -39,6 +39,37 @@ def test_report_includes_privacy_statement_and_history():
     assert report.duration_ms == 45_000.0
 
 
+def test_tick_after_finalize_does_not_recompute_against_stale_buffers():
+    engine = SessionEngine(session_id="s4", started_at=0.0, demo_mode=True, seed=1)
+    for t in range(1_000, 45_000, 1_000):
+        engine.tick(float(t))
+    report = engine.finalize(45_000.0)
+
+    # A client polling long after the session ended (real wall-clock "now",
+    # arbitrarily far from the buffered events) must get back the same
+    # final state, not a recomputed snapshot starved of fresh signals.
+    much_later = engine.tick(10_000_000.0)
+    assert much_later.status == "ended"
+    assert much_later.trust_dna.overall == report.trust_dna.overall
+    assert len(much_later.evidence) == len(report.evidence)
+
+
+def test_finalize_is_idempotent():
+    engine = SessionEngine(session_id="s5", started_at=0.0, demo_mode=True, seed=1)
+    for t in range(1_000, 45_000, 1_000):
+        engine.tick(float(t))
+    first = engine.finalize(45_000.0)
+
+    # Calling finalize() again much later (a re-opened report, a repeat PDF
+    # export) must return the *same* report, not recompute duration/ended_at
+    # against a new, unrelated "now".
+    second = engine.finalize(99_000_000.0)
+    assert second is first
+    assert second.ended_at == 45_000.0
+    assert second.duration_ms == 45_000.0
+    assert len([t for t in second.timeline if t.type == "session_ended"]) == 1
+
+
 def test_raw_event_rejects_unknown_fields():
     import pytest
     from pydantic import ValidationError

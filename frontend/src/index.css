@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+@theme {
+  /* ---- Color System — MAAT Design Tokens ---- */
+  --color-nile-950: #0a1c33;
+  --color-nile-900: #123c69;
+  --color-nile-800: #1a4d82;
+  --color-nile-700: #235f9c;
+  --color-nile-600: #2f74b5;
+  --color-nile-500: #4a8bc9;
+  --color-nile-100: #e3edf6;
+  --color-nile-50: #f2f6fb;
+
+  --color-maat-white: #fafaf8;
+  --color-papyrus: #f3e9d2;
+  --color-papyrus-deep: #e7d8b3;
+
+  --color-gold-700: #a8842a;
+  --color-gold-600: #c19a30;
+  --color-gold-500: #d4af37;
+  --color-gold-100: #f7edcf;
+
+  --color-turquoise-700: #1f7268;
+  --color-turquoise-600: #248579;
+  --color-turquoise-500: #2a9d8f;
+  --color-turquoise-100: #e0f4f1;
+
+  --color-emerald-700: #226b43;
+  --color-emerald-600: #297b4e;
+  --color-emerald-500: #2e8b57;
+  --color-emerald-100: #e2f3e9;
+
+  --color-amber-700: #b3791f;
+  --color-amber-600: #d18b28;
+  --color-amber-500: #e9a03b;
+  --color-amber-100: #fcefdd;
+
+  --color-crimson-700: #7e2f31;
+  --color-crimson-600: #93373a;
+  --color-crimson-500: #a63d40;
+  --color-crimson-100: #f6e3e3;
+
+  --color-charcoal-900: #1c1c1c;
+  --color-charcoal-800: #2b2b2b;
+  --color-charcoal-700: #404040;
+  --color-charcoal-600: #5c5c5c;
+  --color-charcoal-500: #7a7a7a;
+  --color-charcoal-300: #b3b3b3;
+  --color-charcoal-200: #d8d8d5;
+  --color-charcoal-100: #eceae4;
+
+  /* ---- Typography ---- */
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-plex: "IBM Plex Sans", ui-sans-serif, sans-serif;
+
+  /* ---- Radius ---- */
+  --radius-input: 12px;
+  --radius-button: 14px;
+  --radius-card: 16px;
+  --radius-badge: 999px;
+
+  /* ---- Shadows ---- */
+  --shadow-nav: 0 1px 2px 0 rgb(18 60 105 / 0.06), 0 1px 3px 0 rgb(18 60 105 / 0.04);
+  --shadow-card: 0 1px 2px 0 rgb(28 28 28 / 0.04), 0 4px 16px -4px rgb(28 28 28 / 0.06);
+  --shadow-float: 0 8px 30px -6px rgb(18 60 105 / 0.16);
+
+  /* ---- Spacing scale (8pt grid, extends default) ---- */
+  --spacing-18: 4.5rem;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+    color-scheme: light;
+  }
+
+  body {
+    @apply bg-maat-white text-charcoal-800 font-sans antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-nile-700);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background: var(--color-gold-100);
+    color: var(--color-nile-900);
+  }
+
+  * {
+    @apply border-charcoal-200;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer utilities {
+  .bg-grid-faint {
+    background-image:
+      linear-gradient(to right, rgb(18 60 105 / 0.04) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(18 60 105 / 0.04) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  .balance-glow {
+    background: radial-gradient(60% 60% at 50% 40%, rgb(212 175 55 / 0.10), transparent 70%);
+  }
+}

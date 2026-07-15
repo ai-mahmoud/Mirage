@@ -48,11 +48,25 @@ def test_full_session_lifecycle(client):
 
     report_resp = client.get(f"/sessions/{session_id}/report")
     assert report_resp.status_code == 200
-    assert report_resp.headers["content-type"] == "application/pdf"
+    assert report_resp.json()["executiveSummary"] == "Fake summary."
+
+    pdf_resp = client.get(f"/sessions/{session_id}/report/pdf")
+    assert pdf_resp.status_code == 200
+    assert pdf_resp.headers["content-type"] == "application/pdf"
 
     end_resp = client.post(f"/sessions/{session_id}/end")
     assert end_resp.status_code == 200
     assert end_resp.json()["status"] == "ended"
+
+
+def test_list_sessions_includes_created_session(client):
+    created = client.post("/sessions", json={"candidateName": "Ada", "interviewType": "Technical Interview"})
+    session_id = created.json()["sessionId"]
+
+    listed = client.get("/sessions")
+    assert listed.status_code == 200
+    ids = [s["sessionId"] for s in listed.json()]
+    assert session_id in ids
 
 
 def test_unknown_session_returns_404(client):

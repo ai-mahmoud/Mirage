@@ -1,0 +1,13 @@
+.git
+.claude
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.egg-info
+**/.pytest_cache
+backend/backend.db
+backend/reports
+frontend/node_modules
+frontend/dist
+*.zip
+MVP BIBLE.docx

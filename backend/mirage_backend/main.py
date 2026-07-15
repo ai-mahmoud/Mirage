@@ -19,7 +19,7 @@ from .ai_client import AiClient, HttpAiClient
 from .config import DEFAULT_CONFIG
 from .database import make_engine, make_session_factory
 from .pdf_service import render_report
-from .schemas import EventBatch, SessionCreate, SessionResponse, TrustStatusResponse
+from .schemas import EventBatch, SessionCreate, SessionReportOut, SessionResponse, TrustStatusResponse
 
 app = FastAPI(title="Mirage Backend", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -62,6 +62,11 @@ def create_session(
     return session_service.create_session(db, ai, payload)
 
 
+@app.get("/sessions", response_model=list[SessionResponse])
+def list_sessions(db: DBSession = Depends(get_db)) -> list[SessionResponse]:
+    return session_service.list_sessions(db)
+
+
 @app.post("/sessions/{session_id}/events", response_model=TrustStatusResponse)
 def post_events(
     session_id: str, batch: EventBatch, db: DBSession = Depends(get_db), ai: AiClient = Depends(get_ai_client)
@@ -80,8 +85,13 @@ def end_session(session_id: str, db: DBSession = Depends(get_db), ai: AiClient =
     return session_service.end_session(db, ai, session_id)
 
 
-@app.get("/sessions/{session_id}/report")
-def get_report(
+@app.get("/sessions/{session_id}/report", response_model=SessionReportOut)
+def get_report(session_id: str, db: DBSession = Depends(get_db), ai: AiClient = Depends(get_ai_client)) -> SessionReportOut:
+    return session_service.report_out(db, ai, session_id)
+
+
+@app.get("/sessions/{session_id}/report/pdf")
+def get_report_pdf(
     session_id: str,
     db: DBSession = Depends(get_db),
     ai: AiClient = Depends(get_ai_client),

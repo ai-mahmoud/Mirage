@@ -19,6 +19,7 @@ from .schemas import (
     SessionReport,
     SessionSnapshot,
 )
+from .seed import seed_sessions
 
 app = FastAPI(title="Mirage AI", version="0.1.0")
 
@@ -30,6 +31,14 @@ app.add_middleware(
 )
 
 _sessions: dict[str, SessionEngine] = {}
+
+
+@app.on_event("startup")
+def _seed_demo_history() -> None:
+    """Populate a fresh instance with a handful of realistic finished
+    sessions (see seed.py) so backend/'s own seed script has something
+    real to mirror — a no-op if sessions already exist."""
+    seed_sessions(_sessions)
 
 
 def _get_session(session_id: str) -> SessionEngine:
