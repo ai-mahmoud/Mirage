@@ -9,6 +9,7 @@ transition. Run with:
 
 from __future__ import annotations
 
+import httpx
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
@@ -48,6 +49,17 @@ def get_reports_dir() -> str:
 @app.exception_handler(session_service.SessionNotFound)
 def handle_session_not_found(request: Request, exc: session_service.SessionNotFound) -> JSONResponse:
     return JSONResponse(status_code=404, content={"detail": f"Session not found: {exc}"})
+
+
+@app.exception_handler(httpx.HTTPError)
+def handle_ai_service_error(request: Request, exc: httpx.HTTPError) -> JSONResponse:
+    # Without this handler an AI-service failure escapes as an unhandled 500,
+    # whose response bypasses the CORS middleware — the browser then reports a
+    # misleading "blocked by CORS policy" instead of the real cause.
+    return JSONResponse(
+        status_code=502,
+        content={"detail": f"AI service unreachable or failing ({type(exc).__name__}): {exc}"},
+    )
 
 
 @app.get("/health")
