@@ -10,10 +10,11 @@ export function NotFoundPage() {
       </div>
       <h1 className="mt-6 text-2xl font-semibold text-charcoal-900">Page not found</h1>
       <p className="mt-2 max-w-sm text-sm text-charcoal-500">
-        The evidence trail for this page doesn't lead anywhere. Let's get you back to solid ground.
+        The screen you're looking for doesn't exist in this workspace. Every screen in MAAT exists to answer one
+        question — this one doesn't have an answer yet.
       </p>
-      <Link to="/" className="mt-6">
-        <Button>Return Home</Button>
+      <Link to="/dashboard" className="mt-6">
+        <Button>Return to Dashboard</Button>
       </Link>
     </div>
   );
