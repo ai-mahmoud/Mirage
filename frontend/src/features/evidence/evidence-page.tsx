@@ -29,19 +29,19 @@ export function EvidencePage() {
         <EvidenceFeed items={evidence} />
       </div>
       <div className="space-y-6">
-        <Card>
+        <Card interactive>
           <CardContent className="p-5">
-            <p className="text-xs font-medium text-charcoal-500">Evidence Items</p>
-            <p className="tabular mt-2 text-3xl font-semibold text-charcoal-900">{evidence.length}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-charcoal-500">Evidence Items</p>
+            <p className="tabular mt-2.5 text-3xl font-semibold tracking-tight text-charcoal-900">{evidence.length}</p>
           </CardContent>
         </Card>
-        <Card>
+        <Card interactive>
           <CardContent className="p-5">
-            <p className="text-xs font-medium text-charcoal-500">Average Evidence Confidence</p>
-            <p className="tabular mt-2 text-3xl font-semibold text-nile-800">{evidence.length ? `${avgConfidence}%` : "—"}</p>
+            <p className="text-xs font-medium uppercase tracking-wide text-charcoal-500">Average Evidence Confidence</p>
+            <p className="tabular mt-2.5 text-3xl font-semibold tracking-tight text-nile-800">{evidence.length ? `${avgConfidence}%` : "—"}</p>
           </CardContent>
         </Card>
-        <Card className="bg-nile-50 border-nile-100">
+        <Card className="border-nile-100 bg-nile-50/60">
           <CardContent className="p-5 text-xs leading-relaxed text-nile-900">
             Evidence always appears before any recommendation. The platform never states a conclusion without
             the supporting observations attached to it.

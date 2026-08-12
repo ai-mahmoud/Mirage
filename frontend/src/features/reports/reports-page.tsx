@@ -39,11 +39,12 @@ export function ReportsPage() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-wrap items-center justify-between gap-4"
       >
         <div>
-          <p className="text-xs text-charcoal-500">Session Report · {report.sessionId}</p>
-          <h2 className="text-xl font-semibold text-charcoal-900">
+          <p className="text-xs font-medium uppercase tracking-wide text-charcoal-400">Session Report · {report.sessionId}</p>
+          <h2 className="mt-1 text-xl font-semibold tracking-tight text-charcoal-900">
             {report.candidateName} — {report.position ?? "—"}
           </h2>
           <p className="mt-1 text-xs text-charcoal-500">

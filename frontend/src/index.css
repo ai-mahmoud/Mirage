@@ -111,4 +111,37 @@
   .balance-glow {
     background: radial-gradient(60% 60% at 50% 40%, rgb(212 175 55 / 0.10), transparent 70%);
   }
+
+  .card-hover {
+    transition: box-shadow 220ms ease, transform 220ms ease, border-color 220ms ease;
+  }
+  .card-hover:hover {
+    box-shadow: 0 12px 32px -12px rgb(18 60 105 / 0.14), 0 2px 8px -2px rgb(18 60 105 / 0.06);
+    transform: translateY(-2px);
+    border-color: var(--color-nile-100);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

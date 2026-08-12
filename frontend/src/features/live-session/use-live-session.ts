@@ -16,10 +16,10 @@ const EMPTY_TRUST_DNA: TrustDNA = {
   sessionAuthenticity: 75,
 };
 
-// Replaces the old client-simulated version: real browser events are
-// captured (useEventTracker) and posted to the backend, and Trust DNA /
-// evidence / recommendation are polled from it every second — matching
-// CLAUDE.md's "signal stream every second" / "<1s dashboard latency".
+// Real browser events are captured (useEventTracker) and posted to the
+// backend, and Trust DNA / evidence / recommendation are polled from it
+// every second — matching CLAUDE.md's "signal stream every second" /
+// "<1s dashboard latency".
 export function useLiveSession(sessionId: string) {
   const [elapsed, setElapsed] = React.useState(0);
   const [startedAt] = React.useState(() => Date.now());

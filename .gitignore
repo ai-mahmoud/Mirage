@@ -8,5 +8,6 @@ __pycache__/
 backend/backend.db
 backend/reports/
 ai/*.db
+/backend.db
 
 *.zip

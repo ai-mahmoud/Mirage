@@ -12,27 +12,32 @@ import { RecommendationsPage } from "@/features/recommendations/recommendations-
 import { ReportsPage } from "@/features/reports/reports-page";
 import { PrivacyPage } from "@/features/privacy/privacy-page";
 import { SettingsPage } from "@/features/settings/settings-page";
-import { NotFoundPage } from "@/features/not-found/not-found-page";
+import { NotFoundPage } from "@/features/shared/not-found-page";
 
-export const router = createBrowserRouter([
-  { path: "/", element: <LandingPage /> },
-  {
-    element: <AuthLayout />,
-    children: [{ path: "/login", element: <LoginPage /> }],
-  },
-  {
-    element: <DashboardLayout />,
-    children: [
-      { path: "/dashboard", element: <DashboardPage /> },
-      { path: "/live-session", element: <LiveSessionPage /> },
-      { path: "/trust-dna", element: <TrustDnaPage /> },
-      { path: "/evidence", element: <EvidencePage /> },
-      { path: "/timeline", element: <TimelinePage /> },
-      { path: "/recommendations", element: <RecommendationsPage /> },
-      { path: "/reports", element: <ReportsPage /> },
-      { path: "/privacy", element: <PrivacyPage /> },
-      { path: "/settings", element: <SettingsPage /> },
-    ],
-  },
-  { path: "*", element: <NotFoundPage /> },
-]);
+export const router = createBrowserRouter(
+  [
+    { path: "/", element: <LandingPage /> },
+    {
+      element: <AuthLayout />,
+      children: [{ path: "/login", element: <LoginPage /> }],
+    },
+    {
+      element: <DashboardLayout />,
+      children: [
+        { path: "/dashboard", element: <DashboardPage /> },
+        { path: "/live-session", element: <LiveSessionPage /> },
+        { path: "/trust-dna", element: <TrustDnaPage /> },
+        { path: "/evidence", element: <EvidencePage /> },
+        { path: "/timeline", element: <TimelinePage /> },
+        { path: "/recommendations", element: <RecommendationsPage /> },
+        { path: "/reports", element: <ReportsPage /> },
+        { path: "/privacy", element: <PrivacyPage /> },
+        { path: "/settings", element: <SettingsPage /> },
+      ],
+    },
+    { path: "*", element: <NotFoundPage /> },
+  ],
+  // BASE_URL reflects Vite's `base` config (e.g. "/Mirage/" on GitHub Pages,
+  // "/" for local/Docker), so routes resolve correctly under either.
+  { basename: import.meta.env.BASE_URL },
+);

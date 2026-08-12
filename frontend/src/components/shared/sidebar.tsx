@@ -39,14 +39,14 @@ export function Sidebar() {
             to={to}
             className={({ isActive }) =>
               cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-colors",
+                "relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200",
                 isActive
                   ? "bg-nile-900 text-white shadow-sm"
-                  : "text-charcoal-600 hover:bg-charcoal-100 hover:text-charcoal-900"
+                  : "text-charcoal-600 hover:bg-charcoal-100 hover:text-charcoal-900 hover:pl-3.5"
               )
             }
           >
-            <Icon className="size-4" />
+            <Icon className="size-4 shrink-0" />
             {label}
           </NavLink>
         ))}

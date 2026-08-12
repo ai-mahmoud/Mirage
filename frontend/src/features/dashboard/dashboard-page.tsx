@@ -6,6 +6,7 @@ import { Bar, BarChart, ResponsiveContainer, XAxis, Tooltip, CartesianGrid, PieC
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { SkeletonCard, Skeleton } from "@/components/ui/skeleton";
 import { checkHealth, listSessions } from "@/lib/api-client";
 import { deriveActivityFeed, mapSessionSummary } from "@/lib/session-mappers";
 import { bandFromScore, BAND_META, RECOMMENDATION_META } from "@/lib/confidence";
@@ -49,8 +50,42 @@ export function DashboardPage() {
   const navigate = useNavigate();
   const { setCurrentSessionId } = useCurrentSession();
 
-  const { data: rawSessions } = useQuery({ queryKey: ["sessions"], queryFn: listSessions, refetchInterval: 5000 });
+  const { data: rawSessions, isLoading } = useQuery({ queryKey: ["sessions"], queryFn: listSessions, refetchInterval: 5000 });
   const { data: healthy } = useQuery({ queryKey: ["health"], queryFn: checkHealth, refetchInterval: 10_000 });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-6 w-64" />
+            <Skeleton className="h-3.5 w-80" />
+          </div>
+          <div className="flex gap-3">
+            <Skeleton className="h-9 w-32 rounded-[var(--radius-button)]" />
+            <Skeleton className="h-9 w-40 rounded-[var(--radius-button)]" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+        <div className="grid gap-6 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardContent className="p-5">
+              <Skeleton className="h-52 w-full" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-5">
+              <Skeleton className="h-52 w-full rounded-full" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   const sessions: SessionSummary[] = (rawSessions ?? []).map(mapSessionSummary);
   const todaysSessions = sessions.filter((s) => isToday(s.startedAt)).length;
@@ -80,12 +115,12 @@ export function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Quick actions */}
-      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
-          <h2 className="text-lg font-semibold text-charcoal-900">Good to see you, Demo Observer.</h2>
-          <p className="text-sm text-charcoal-500">Here is what's happening across your workspace today.</p>
+          <h2 className="text-[22px] font-semibold tracking-tight text-charcoal-900">Good to see you, Demo Observer.</h2>
+          <p className="mt-1 text-sm text-charcoal-500">Here is what's happening across your workspace today.</p>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" className="gap-1.5" onClick={openLastReport} disabled={!sessions.length}>
@@ -102,8 +137,8 @@ export function DashboardPage() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {kpis.map(({ icon: Icon, label, value, chip }, i) => (
-          <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-            <Card>
+          <motion.div key={label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, duration: 0.4, ease: [0.16, 1, 0.3, 1] }}>
+            <Card interactive className="h-full">
               <CardContent className="p-5">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-medium text-charcoal-500">{label}</span>
@@ -111,7 +146,7 @@ export function DashboardPage() {
                     <Icon className="size-4" />
                   </span>
                 </div>
-                <p className="tabular mt-3 text-2xl font-semibold text-charcoal-900">{value}</p>
+                <p className="tabular mt-3.5 text-[26px] font-semibold leading-none tracking-tight text-charcoal-900">{value}</p>
               </CardContent>
             </Card>
           </motion.div>
@@ -170,7 +205,7 @@ export function DashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {["AI Engine", "Tracking Engine", "Evidence Engine", "Recommendation Engine"].map((s) => (
-              <div key={s} className="flex items-center justify-between text-sm">
+              <div key={s} className="flex items-center justify-between rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-charcoal-50">
                 <span className="text-charcoal-700">{s}</span>
                 <Badge tone={healthy ? "success" : "danger"} dot>
                   {healthy ? "Running" : "Unreachable"}
@@ -205,18 +240,21 @@ export function DashboardPage() {
       {/* Recent sessions */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Sessions</CardTitle>
+          <div>
+            <CardTitle>Recent Sessions</CardTitle>
+            <CardDescription>Showing the {Math.min(sessions.length, 8)} most recent of {sessions.length}</CardDescription>
+          </div>
         </CardHeader>
         <CardContent className="p-0">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-charcoal-100 text-left text-xs text-charcoal-500">
-                <th className="px-5 py-3 font-medium">Candidate</th>
-                <th className="px-5 py-3 font-medium">Position</th>
-                <th className="px-5 py-3 font-medium">Confidence</th>
-                <th className="px-5 py-3 font-medium">Recommendation</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3" />
+              <tr className="border-b border-charcoal-100 text-left text-[11px] uppercase tracking-wide text-charcoal-400">
+                <th className="px-5 py-3.5 font-medium">Candidate</th>
+                <th className="px-5 py-3.5 font-medium">Position</th>
+                <th className="px-5 py-3.5 font-medium">Confidence</th>
+                <th className="px-5 py-3.5 font-medium">Recommendation</th>
+                <th className="px-5 py-3.5 font-medium">Status</th>
+                <th className="px-5 py-3.5" />
               </tr>
             </thead>
             <tbody>
@@ -227,13 +265,13 @@ export function DashboardPage() {
                   </td>
                 </tr>
               )}
-              {sessions.map((s) => {
+              {sessions.slice(0, 8).map((s) => {
                 const meta = RECOMMENDATION_META[s.recommendation];
                 return (
-                  <tr key={s.id} className="border-b border-charcoal-100 last:border-0 hover:bg-charcoal-50/60">
+                  <tr key={s.id} className="border-b border-charcoal-100 text-[13px] transition-colors last:border-0 hover:bg-nile-50/50">
                     <td className="px-5 py-3.5 font-medium text-charcoal-800">{s.candidateName}</td>
                     <td className="px-5 py-3.5 text-charcoal-600">{s.position}</td>
-                    <td className="tabular px-5 py-3.5 text-charcoal-800">{s.decisionConfidence}%</td>
+                    <td className="tabular px-5 py-3.5 font-medium text-charcoal-800">{s.decisionConfidence}%</td>
                     <td className="px-5 py-3.5">
                       <Badge tone={meta.tone}>{meta.label}</Badge>
                     </td>
@@ -241,7 +279,7 @@ export function DashboardPage() {
                     <td className="px-5 py-3.5 text-right">
                       <button
                         onClick={() => viewSession(s.id)}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-nile-800 hover:underline"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-nile-800 transition-colors hover:text-nile-600 hover:underline"
                       >
                         View <ArrowUpRight className="size-3" />
                       </button>

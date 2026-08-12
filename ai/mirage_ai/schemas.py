@@ -248,3 +248,18 @@ class IngestRequest(ApiModel):
     POST /sessions/{id}/events."""
 
     events: list[RawEvent] = Field(default_factory=list)
+
+
+class SeedSessionInfo(ApiModel):
+    """A SeedSessionInfo is one entry from GET /seed/sessions — enough for
+    backend/'s own seed script to construct a matching InterviewSessionRow
+    without duplicating ai/'s PROFILES list. Not part of the product's
+    real request-serving contract; a bootstrap-only endpoint."""
+
+    session_id: str
+    candidate_name: str
+    observer_name: str
+    position: Optional[str]
+    department: Optional[str]
+    interview_type: Optional[str]
+    live: bool

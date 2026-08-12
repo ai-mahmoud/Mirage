@@ -5,6 +5,7 @@ description = "Mirage AI service — explainable behavioral intelligence engine 
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",
+    "fastapi-cli>=0.0.5",
     "uvicorn[standard]>=0.29",
     "pydantic>=2.6",
 ]

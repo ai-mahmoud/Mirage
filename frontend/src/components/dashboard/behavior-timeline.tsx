@@ -19,26 +19,28 @@ export function BehaviorTimeline({ events }: { events: TimelineEvent[] }) {
         </div>
       </CardHeader>
       <CardContent>
-        <ol className="relative ml-3 space-y-5 border-l border-charcoal-200 pl-6">
+        <ol className="relative ml-3 space-y-6 border-l border-charcoal-200 pl-6">
           {events.map((event, i) => (
             <motion.li
               key={event.id}
               initial={{ opacity: 0, x: -8 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="relative"
+              transition={{ delay: i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+              className="group relative"
             >
               <span
                 className={cn(
-                  "absolute -left-[31px] top-1 size-3 rounded-full ring-4 ring-white",
+                  "absolute -left-[31px] top-1 size-3 rounded-full ring-4 ring-white transition-transform duration-200 group-hover:scale-125",
                   event.severity ? DOT_TONE[event.severity] : "bg-nile-700"
                 )}
               />
-              <p className="text-sm font-medium text-charcoal-800">{event.label}</p>
-              {event.detail && <p className="text-xs text-charcoal-500">{event.detail}</p>}
-              <p className="mt-0.5 text-[11px] text-charcoal-400">
-                {new Date(event.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-              </p>
+              <div className="rounded-lg px-2 py-1 transition-colors group-hover:bg-charcoal-50">
+                <p className="text-sm font-medium text-charcoal-800">{event.label}</p>
+                {event.detail && <p className="text-xs text-charcoal-500">{event.detail}</p>}
+                <p className="mt-0.5 text-[11px] text-charcoal-400">
+                  {new Date(event.timestamp).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                </p>
+              </div>
             </motion.li>
           ))}
         </ol>

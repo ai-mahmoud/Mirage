@@ -1,8 +1,9 @@
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import { Link } from "react-router-dom";
 import { Feather, Scale, Eye, ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LogoMark, Wordmark } from "@/components/shared/logo-mark";
+import { BalanceSignature } from "@/features/landing/balance-signature";
 
 const CAPABILITIES = [
   {
@@ -29,69 +30,91 @@ const CAPABILITIES = [
 
 const TRUST_INDICATORS = ["Privacy-First", "Explainable AI", "Human Oversight", "Real-Time Intelligence"];
 
+const fadeUp: Variants = {
+  hidden: { opacity: 0, y: 18 },
+  show: (i: number = 0) => ({
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.6, delay: i * 0.08, ease: [0.16, 1, 0.3, 1] as const },
+  }),
+};
+
 export function LandingPage() {
   return (
     <div className="min-h-screen bg-maat-white">
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-2.5">
-          <LogoMark />
-          <Wordmark className="text-lg" />
+      {/* Nav */}
+      <header className="sticky top-0 z-20 border-b border-transparent bg-maat-white/70 backdrop-blur-md">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
+          <div className="flex items-center gap-2.5">
+            <LogoMark />
+            <Wordmark className="text-lg" />
+          </div>
+          <nav className="flex items-center gap-2">
+            <Link to="/login">
+              <Button variant="ghost" size="sm">
+                Log in
+              </Button>
+            </Link>
+            <Link to="/login">
+              <Button variant="primary" size="sm">
+                Start Demo
+              </Button>
+            </Link>
+          </nav>
         </div>
-        <nav className="flex items-center gap-3">
-          <Link to="/login">
-            <Button variant="ghost" size="sm">
-              Log in
-            </Button>
-          </Link>
-          <Link to="/login">
-            <Button variant="primary" size="sm">
-              Start Demo
-            </Button>
-          </Link>
-        </nav>
       </header>
 
       {/* Hero */}
       <section className="relative overflow-hidden">
-        <div className="bg-grid-faint absolute inset-0 opacity-40" />
-        <div className="balance-glow absolute left-1/2 top-0 h-[560px] w-[560px] -translate-x-1/2 rounded-full" />
-        <div className="relative mx-auto max-w-4xl px-6 pb-24 pt-16 text-center">
+        <div className="bg-grid-faint absolute inset-0 opacity-[0.35] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,black,transparent)]" />
+        <div className="balance-glow absolute left-1/2 top-[-120px] h-[620px] w-[620px] -translate-x-1/2 rounded-full" />
+
+        <div className="relative mx-auto max-w-4xl px-6 pb-8 pt-20 text-center sm:pt-28">
           <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={0}
             className="inline-flex items-center gap-2 rounded-full border border-charcoal-200 bg-white px-4 py-1.5 text-xs font-medium text-charcoal-600 shadow-sm"
           >
-            <span className="size-1.5 rounded-full bg-turquoise-500" />
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-turquoise-400 opacity-75" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-turquoise-500" />
+            </span>
             Explainable Human Authenticity Intelligence
           </motion.div>
 
           <motion.h1
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.05 }}
-            className="mt-6 text-4xl font-semibold tracking-tight text-charcoal-900 sm:text-5xl"
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={1}
+            className="text-balance mt-7 text-[2.75rem] font-semibold leading-[1.08] tracking-[-0.02em] text-charcoal-900 sm:text-6xl sm:leading-[1.05]"
           >
-            Evidence-Based Human Trust
+            Evidence-based human trust
             <br />
-            for Digital Decisions
+            <span className="bg-gradient-to-r from-nile-900 via-nile-700 to-turquoise-600 bg-clip-text text-transparent">
+              for digital decisions.
+            </span>
           </motion.h1>
 
           <motion.p
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.1 }}
-            className="mx-auto mt-5 max-w-xl text-base text-charcoal-600"
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={2}
+            className="text-balance mx-auto mt-6 max-w-xl text-[17px] leading-relaxed text-charcoal-500"
           >
-            Transform behavioral signals into transparent decision confidence through explainable AI.
-            MAAT continuously evaluates interaction authenticity — the human always makes the final call.
+            MAAT transforms behavioral signals into transparent decision confidence through explainable AI —
+            continuously evaluating interaction authenticity while the human always makes the final call.
           </motion.p>
 
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, delay: 0.15 }}
-            className="mt-8 flex items-center justify-center gap-3"
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={3}
+            className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
           >
             <Link to="/login">
               <Button size="lg" className="gap-2">
@@ -104,40 +127,54 @@ export function LandingPage() {
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.6, delay: 0.3 }}
-            className="mt-12 flex flex-wrap items-center justify-center gap-x-8 gap-y-3"
+            variants={fadeUp}
+            initial="hidden"
+            animate="show"
+            custom={4}
+            className="mt-14 flex flex-wrap items-center justify-center gap-x-9 gap-y-3"
           >
             {TRUST_INDICATORS.map((t) => (
-              <span key={t} className="text-xs font-medium tracking-wide text-charcoal-500">
+              <span key={t} className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-charcoal-400">
+                <span className="size-1 rounded-full bg-gold-500" />
                 {t}
               </span>
             ))}
           </motion.div>
         </div>
+
+        {/* Signature element — the weighing of evidence, rendered as a live balance */}
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
+          className="relative mx-auto mt-16 max-w-3xl px-6 pb-24"
+        >
+          <BalanceSignature />
+        </motion.div>
       </section>
 
       {/* Capabilities */}
-      <section className="mx-auto max-w-6xl px-6 pb-24">
-        <div className="mb-10 text-center">
-          <p className="text-xs font-semibold uppercase tracking-widest text-gold-600">Core Capabilities</p>
-          <h2 className="mt-2 text-2xl font-semibold text-charcoal-900">Capture. Reason. Explain. Support.</h2>
+      <section className="mx-auto max-w-6xl px-6 pb-28">
+        <div className="mb-14 text-center">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-gold-600">Core Capabilities</p>
+          <h2 className="mt-3 text-[26px] font-semibold tracking-tight text-charcoal-900">
+            Capture. Reason. Explain. Support.
+          </h2>
         </div>
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {CAPABILITIES.map(({ icon: Icon, title, body }, i) => (
             <motion.div
               key={title}
-              initial={{ opacity: 0, y: 14 }}
+              initial={{ opacity: 0, y: 18 }}
               whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.08 }}
-              className="rounded-[var(--radius-card)] border border-charcoal-200 bg-white p-6 shadow-[var(--shadow-card)]"
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ delay: i * 0.09, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+              className="card-hover group rounded-[var(--radius-card)] border border-charcoal-200 bg-white p-6"
             >
-              <div className="flex size-10 items-center justify-center rounded-full bg-nile-50 text-nile-800">
+              <div className="flex size-11 items-center justify-center rounded-full bg-nile-50 text-nile-800 transition-colors duration-300 group-hover:bg-nile-900 group-hover:text-white">
                 <Icon className="size-5" />
               </div>
-              <h3 className="mt-4 text-sm font-semibold text-charcoal-800">{title}</h3>
+              <h3 className="mt-5 text-[15px] font-semibold text-charcoal-800">{title}</h3>
               <p className="mt-2 text-[13px] leading-relaxed text-charcoal-500">{body}</p>
             </motion.div>
           ))}
@@ -146,19 +183,29 @@ export function LandingPage() {
 
       {/* Privacy statement */}
       <section className="border-t border-charcoal-200 bg-papyrus/40">
-        <div className="mx-auto max-w-3xl px-6 py-16 text-center">
-          <ShieldCheck className="mx-auto size-8 text-turquoise-600" />
-          <h3 className="mt-4 text-xl font-semibold text-charcoal-900">Privacy by design, not an afterthought.</h3>
-          <p className="mt-3 text-sm leading-relaxed text-charcoal-600">
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="mx-auto max-w-3xl px-6 py-20 text-center"
+        >
+          <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-turquoise-100">
+            <ShieldCheck className="size-6 text-turquoise-700" />
+          </div>
+          <h3 className="mt-5 text-2xl font-semibold tracking-tight text-charcoal-900">
+            Privacy by design, not an afterthought.
+          </h3>
+          <p className="mx-auto mt-4 max-w-lg text-[15px] leading-relaxed text-charcoal-600">
             No keyboard content is stored. No microphone recording. No persistent video storage.
             MAAT observes behavioral metadata only — never the content of what is typed or said.
           </p>
-        </div>
+        </motion.div>
       </section>
 
-      <footer className="mx-auto flex max-w-6xl items-center justify-between px-6 py-8 text-xs text-charcoal-400">
+      <footer className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-10 text-xs text-charcoal-400 sm:flex-row">
         <span>© {new Date().getFullYear()} MAAT. Built for the AI Hackathon.</span>
-        <span>Evidence supports decisions. Humans make them.</span>
+        <span className="italic text-charcoal-400">Evidence supports decisions. Humans make them.</span>
       </footer>
     </div>
   );

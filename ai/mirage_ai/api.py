@@ -16,10 +16,11 @@ from .schemas import (
     CreateSessionRequest,
     CreateSessionResponse,
     IngestRequest,
+    SeedSessionInfo,
     SessionReport,
     SessionSnapshot,
 )
-from .seed import seed_sessions
+from .seed import PROFILES, seed_sessions
 
 app = FastAPI(title="Mirage AI", version="0.1.0")
 
@@ -93,3 +94,24 @@ def end_session(session_id: str) -> dict:
     engine = _get_session(session_id)
     del _sessions[session_id]
     return {"status": "deleted", "session_id": engine.session_id}
+
+
+@app.get("/seed/sessions", response_model=list[SeedSessionInfo])
+def list_seed_sessions() -> list[SeedSessionInfo]:
+    """Bootstrap-only: the id/identity list for whatever this process
+    seeded at startup, so backend/'s own seed script can mirror them
+    without hand-duplicating PROFILES. Not part of the product's real
+    request-serving contract."""
+    return [
+        SeedSessionInfo(
+            session_id=p["session_id"],
+            candidate_name=p["candidate"],
+            observer_name=p["observer"],
+            position=p["position"],
+            department=p["department"],
+            interview_type=p["interview_type"],
+            live=p["live"],
+        )
+        for p in PROFILES
+        if p["session_id"] in _sessions
+    ]
