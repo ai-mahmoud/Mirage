@@ -76,3 +76,28 @@ def test_raises_on_http_error_status():
         pass
     else:
         raise AssertionError("expected HTTPStatusError")
+
+
+def test_every_outgoing_request_carries_the_current_request_id():
+    """The whole point of request_context.py's correlation id: backend's
+    own logs and ai/'s logs for one end-user request should be greppable
+    by the same id. This is the half of that contract HttpAiClient owns —
+    forwarding whatever id is current onto every outgoing call to ai/."""
+    from mirage_backend.request_context import _request_id
+
+    seen_headers = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_headers.append(request.headers.get("x-request-id"))
+        return httpx.Response(200, json={"sessionId": "abc123", "startedAt": 0.0, "demo": False})
+
+    client = _client(handler)
+    token = _request_id.set("test-correlation-id-123")
+    try:
+        client.create_session(
+            candidate_name="Ada", observer_name="Bob", position=None, department=None, interview_type=None
+        )
+    finally:
+        _request_id.reset(token)
+
+    assert seen_headers == ["test-correlation-id-123"]

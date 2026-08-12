@@ -15,7 +15,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Protocol
 
-from sqlalchemy import JSON, Column, DateTime, String, create_engine
+from sqlalchemy import JSON, Column, DateTime, String, create_engine, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from .engine import SessionEngine
@@ -40,6 +40,7 @@ class SessionStore(Protocol):
         save     : SessionEngine -> Void
         delete   : String -> Void
         list_ids : -> (list-of String)   -- for startup seeding + /seed/sessions
+        ping     : -> Boolean             -- for GET /health's readiness check
     """
 
     def get(self, session_id: str) -> SessionEngine | None: ...
@@ -49,6 +50,8 @@ class SessionStore(Protocol):
     def delete(self, session_id: str) -> None: ...
 
     def list_ids(self) -> list[str]: ...
+
+    def ping(self) -> bool: ...
 
 
 class InMemorySessionStore:
@@ -70,6 +73,9 @@ class InMemorySessionStore:
 
     def list_ids(self) -> list[str]:
         return list(self._sessions.keys())
+
+    def ping(self) -> bool:
+        return True
 
 
 class PostgresSessionStore:
@@ -114,3 +120,8 @@ class PostgresSessionStore:
     def list_ids(self) -> list[str]:
         with self._session_factory() as db:
             return [row.session_id for row in db.query(SessionRow.session_id).all()]
+
+    def ping(self) -> bool:
+        with self._session_factory() as db:
+            db.execute(text("SELECT 1"))
+        return True

@@ -9,6 +9,8 @@ schemas.py, then delegates to session_service.py (or auth.py, for the
 
 from __future__ import annotations
 
+import logging
+
 import httpx
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,13 +18,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
+from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
 
 from . import auth, session_service
 from .ai_client import AiClient, HttpAiClient
 from .config import DEFAULT_CONFIG
 from .database import User, make_engine, make_session_factory
+from .logging_config import configure_logging
 from .pdf_service import render_report
+from .request_context import RequestIdMiddleware, get_request_id
 from .schemas import (
     EventBatch,
     LoginRequest,
@@ -34,6 +39,14 @@ from .schemas import (
     TrustStatusResponse,
     UserResponse,
 )
+
+configure_logging()
+logger = logging.getLogger("mirage_backend")
+
+if DEFAULT_CONFIG.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(dsn=DEFAULT_CONFIG.sentry_dsn, environment=DEFAULT_CONFIG.environment, traces_sample_rate=0.1)
 
 app = FastAPI(
     title="Mirage Backend",
@@ -47,6 +60,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware, allow_origins=DEFAULT_CONFIG.cors_origins, allow_methods=["*"], allow_headers=["*"]
 )
+app.add_middleware(RequestIdMiddleware)
 
 # Rate limiting: credential-guessing and session-flooding are the two
 # things worth throttling here. Keyed by remote address — coarse, but
@@ -133,15 +147,49 @@ def handle_ai_service_error(request: Request, exc: httpx.HTTPError) -> JSONRespo
     # Without this handler an AI-service failure escapes as an unhandled 500,
     # whose response bypasses the CORS middleware — the browser then reports a
     # misleading "blocked by CORS policy" instead of the real cause.
+    logger.warning("ai/ service error: %s: %s", type(exc).__name__, exc)
     return JSONResponse(
         status_code=502,
         content={"detail": f"AI service unreachable or failing ({type(exc).__name__}): {exc}"},
     )
 
 
+@app.exception_handler(Exception)
+def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    # Catch-all: everything above is a known, named failure mode with its
+    # own handler. Anything reaching here is a genuine bug — log the full
+    # traceback (Sentry, if configured, captures it too) and return a
+    # generic body with the correlation id so a support conversation has
+    # something to search logs by, without leaking internals to the client.
+    #
+    # FastAPI routes bare-`Exception` handlers through Starlette's
+    # ServerErrorMiddleware, which sits outside RequestIdMiddleware — so
+    # the response header that middleware would normally inject never
+    # applies here; set it explicitly. request.state.request_id (set
+    # directly on the ASGI scope) is used over get_request_id() since
+    # it's guaranteed present regardless of exactly where in the
+    # middleware stack this handler ends up running.
+    request_id = getattr(request.state, "request_id", None) or get_request_id()
+    logger.exception("unhandled exception")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "requestId": request_id},
+        headers={"X-Request-ID": request_id},
+    )
+
+
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
+def health(db: DBSession = Depends(get_db)) -> JSONResponse:
+    """Liveness AND readiness: a plain "the process is up" response was
+    fine for a single-container demo, but a healthcheck that can't tell
+    "process up, database unreachable" from "everything's fine" is
+    useless for orchestration/alerting once this is a real deployment."""
+    try:
+        db.execute(text("SELECT 1"))
+        return JSONResponse(status_code=200, content={"status": "ok", "database": "connected"})
+    except Exception as exc:  # noqa: BLE001 - any DB failure means "not ready"
+        logger.error("health check: database unreachable: %s", exc)
+        return JSONResponse(status_code=503, content={"status": "degraded", "database": "unreachable"})
 
 
 # --- Auth ----------------------------------------------------------------
@@ -152,6 +200,7 @@ def health() -> dict:
 def signup(request: Request, payload: SignupRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
     user = auth.signup(db, payload.org_name, payload.email, payload.password)
     token = auth.create_access_token(user, DEFAULT_CONFIG.jwt_secret_key)
+    logger.info("org signed up: org_id=%s user_id=%s", user.org_id, user.user_id)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
@@ -160,6 +209,7 @@ def signup(request: Request, payload: SignupRequest, db: DBSession = Depends(get
 def login(request: Request, payload: LoginRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
     user = auth.login(db, payload.email, payload.password)
     token = auth.create_access_token(user, DEFAULT_CONFIG.jwt_secret_key)
+    logger.info("user logged in: org_id=%s user_id=%s", user.org_id, user.user_id)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 

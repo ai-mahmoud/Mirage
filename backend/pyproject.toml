@@ -16,6 +16,7 @@ dependencies = [
     "bcrypt>=4.1",
     "pyjwt>=2.8",
     "slowapi>=0.1.9",
+    "sentry-sdk[fastapi]>=2.0",
 ]
 
 [project.optional-dependencies]

@@ -18,6 +18,8 @@ from typing import Protocol
 
 import httpx
 
+from .request_context import REQUEST_ID_HEADER, get_request_id
+
 
 class AiClient(Protocol):
     def create_session(
@@ -53,7 +55,19 @@ class HttpAiClient:
     """
 
     def __init__(self, base_url: str, timeout: float = 5.0, transport: httpx.BaseTransport | None = None) -> None:
-        self._client = httpx.Client(base_url=base_url, timeout=timeout, transport=transport)
+        # An event hook (not a per-call header) so every outgoing request —
+        # present and future call sites alike — carries the current
+        # request's correlation id without each method having to remember to.
+        self._client = httpx.Client(
+            base_url=base_url,
+            timeout=timeout,
+            transport=transport,
+            event_hooks={"request": [self._attach_request_id]},
+        )
+
+    @staticmethod
+    def _attach_request_id(request: httpx.Request) -> None:
+        request.headers[REQUEST_ID_HEADER] = get_request_id()
 
     def create_session(
         self,

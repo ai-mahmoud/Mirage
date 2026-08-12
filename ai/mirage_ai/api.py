@@ -6,16 +6,20 @@ normal operation, so a restart or scale-out no longer drops live sessions.
 
 from __future__ import annotations
 
+import logging
 import time
 import uuid
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from .engine import SessionEngine
+from .logging_config import configure_logging
+from .request_context import RequestIdMiddleware, get_request_id
 from .schemas import (
     CreateSessionRequest,
     CreateSessionResponse,
@@ -27,6 +31,16 @@ from .schemas import (
 from .seed import PROFILES, seed_sessions
 from .settings import DEFAULT_SETTINGS
 from .store import PostgresSessionStore, SessionStore
+
+configure_logging()
+logger = logging.getLogger("mirage_ai")
+
+if DEFAULT_SETTINGS.sentry_dsn:
+    import sentry_sdk
+
+    sentry_sdk.init(
+        dsn=DEFAULT_SETTINGS.sentry_dsn, environment=DEFAULT_SETTINGS.environment, traces_sample_rate=0.1
+    )
 
 app = FastAPI(
     title="Mirage AI",
@@ -44,6 +58,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(RequestIdMiddleware)
 
 # In the real architecture only backend/ creates ai/ sessions
 # (server-to-server), but this guards against a misconfigured or
@@ -90,9 +105,32 @@ def _get_session(store: SessionStore, session_id: str) -> SessionEngine:
     return engine
 
 
+@app.exception_handler(Exception)
+def handle_unexpected_error(request: Request, exc: Exception) -> JSONResponse:
+    # See backend/mirage_backend/main.py's identical handler for why
+    # request.state.request_id (not get_request_id()) is used here —
+    # FastAPI routes bare-`Exception` handlers outside every
+    # add_middleware()-added middleware, including RequestIdMiddleware.
+    request_id = getattr(request.state, "request_id", None) or get_request_id()
+    logger.exception("unhandled exception")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error", "requestId": request_id},
+        headers={"X-Request-ID": request_id},
+    )
+
+
 @app.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
+def health(store: SessionStore = Depends(get_store)) -> JSONResponse:
+    """Liveness AND readiness — a plain "the process is up" response
+    can't tell "healthy" from "database unreachable" apart, which is
+    useless for orchestration/alerting once this is a real deployment."""
+    try:
+        store.ping()
+        return JSONResponse(status_code=200, content={"status": "ok", "database": "connected"})
+    except Exception as exc:  # noqa: BLE001 - any store failure means "not ready"
+        logger.error("health check: database unreachable: %s", exc)
+        return JSONResponse(status_code=503, content={"status": "degraded", "database": "unreachable"})
 
 
 @app.post("/sessions", response_model=CreateSessionResponse)

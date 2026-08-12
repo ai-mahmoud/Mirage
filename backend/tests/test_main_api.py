@@ -37,7 +37,9 @@ def client(tmp_path):
 
 
 def test_health_check(client):
-    assert client.get("/health").json() == {"status": "ok"}
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "ok", "database": "connected"}
 
 
 def test_full_session_lifecycle(client):
@@ -81,3 +83,43 @@ def test_list_sessions_includes_created_session(client):
 def test_unknown_session_returns_404(client):
     resp = client.get("/sessions/does-not-exist/trust")
     assert resp.status_code == 404
+
+
+def test_every_response_carries_a_request_id_header(client):
+    resp = client.get("/health")
+    assert resp.headers.get("x-request-id")
+
+
+# --- Observability: health degradation + the generic 500 handler --------
+
+
+def test_health_check_returns_503_when_database_unreachable(client):
+    class BrokenDb:
+        def execute(self, *args, **kwargs):
+            raise RuntimeError("connection refused")
+
+    app.dependency_overrides[get_db] = lambda: BrokenDb()
+    resp = client.get("/health")
+    assert resp.status_code == 503
+    assert resp.json() == {"status": "degraded", "database": "unreachable"}
+
+
+def test_unhandled_exception_returns_generic_500_with_request_id(client):
+    class ExplodingAiClient:
+        def create_session(self, **kwargs):
+            raise RuntimeError("boom — not a known failure mode")
+
+    app.dependency_overrides[get_ai_client] = lambda: ExplodingAiClient()
+    # TestClient's default raise_server_exceptions=True re-raises even an
+    # exception a registered handler already converted to a response
+    # (deliberate Starlette/FastAPI behavior, so a real bug isn't silently
+    # swallowed in tests) — disabled here since observing the handler's
+    # actual response IS the point of this test.
+    no_raise_client = TestClient(app, raise_server_exceptions=False)
+    resp = no_raise_client.post("/sessions", json={"candidateName": "Ada"})
+    assert resp.status_code == 500
+    body = resp.json()
+    assert body["detail"] == "Internal server error"
+    assert body["requestId"]
+    # ...and it's the same id the response header carries, for correlation.
+    assert body["requestId"] == resp.headers["x-request-id"]

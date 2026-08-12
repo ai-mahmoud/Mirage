@@ -14,6 +14,8 @@ pattern for the small set of settings this *process* needs to start up:
                     meant to hit ai/ in production.
     environment  - String, "development" | "production" — gates /docs
                     exposure (see api.py)
+    sentry_dsn   - String, Sentry error-tracking DSN; "" (default)
+                    disables Sentry entirely — see api.py
 
 Nothing below this module re-reads `os.environ` directly — tests build a
 Settings by hand instead of touching the process environment.
@@ -43,6 +45,7 @@ class Settings:
     database_url: str = "postgresql+psycopg://mirage:mirage@localhost:5432/mirage"
     cors_origins: list[str] = field(default_factory=lambda: _parse_origins(DEFAULT_CORS_ORIGINS))
     environment: str = "development"
+    sentry_dsn: str = ""
 
 
 def load_settings() -> Settings:
@@ -58,6 +61,7 @@ def load_settings() -> Settings:
         ),
         cors_origins=_parse_origins(os.environ.get("AI_CORS_ORIGINS", DEFAULT_CORS_ORIGINS)),
         environment=os.environ.get("AI_ENVIRONMENT", "development"),
+        sentry_dsn=os.environ.get("AI_SENTRY_DSN", ""),
     )
 
 
