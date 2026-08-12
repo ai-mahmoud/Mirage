@@ -39,26 +39,35 @@ from .schemas import (
 
 
 class SessionNotFound(Exception):
-    """Raised when a session_id does not name an existing session."""
+    """Raised when a session_id does not name an existing session — also
+    raised (deliberately, not a separate "forbidden" case) when it names
+    a session belonging to a different org, so cross-org access can't be
+    distinguished from "doesn't exist" by an unauthorized caller."""
 
 
-def _get_or_raise(db: DBSession, session_id: str) -> InterviewSessionRow:
-    """_get_or_raise: DBSession String -> InterviewSessionRow
-    Purpose: fetch the session row for `session_id`, or raise SessionNotFound.
+def _get_or_raise(db: DBSession, session_id: str, org_id: str | None = None) -> InterviewSessionRow:
+    """_get_or_raise: DBSession String [String] -> InterviewSessionRow
+    Purpose: fetch the session row for `session_id`, or raise
+    SessionNotFound. When `org_id` is given, a session belonging to a
+    different org raises SessionNotFound exactly as if it didn't exist —
+    this is the multi-tenancy enforcement point every route goes through.
     """
     row = db.get(InterviewSessionRow, session_id)
-    if row is None:
+    if row is None or (org_id is not None and row.org_id != org_id):
         raise SessionNotFound(session_id)
     return row
 
 
-def create_session(db: DBSession, ai: AiClient, payload: SessionCreate) -> InterviewSessionRow:
-    """create_session: DBSession AiClient SessionCreate -> InterviewSessionRow
+def create_session(
+    db: DBSession, ai: AiClient, payload: SessionCreate, org_id: str
+) -> InterviewSessionRow:
+    """create_session: DBSession AiClient SessionCreate String -> InterviewSessionRow
     Purpose: open a new interview session — create its mirrored session in
-    the ai/ service first, then persist the local record pointing at it.
+    the ai/ service first, then persist the local record pointing at it,
+    scoped to the authenticated caller's org.
     Example:
-      create_session(db, fake_ai, SessionCreate(candidate_name="Ada", interview_type="Technical Interview"))
-      produces a row with status == "active" and a non-empty ai_session_id.
+      create_session(db, fake_ai, SessionCreate(candidate_name="Ada", interview_type="Technical Interview"), org_id="org-1")
+      produces a row with status == "active", org_id == "org-1", and a non-empty ai_session_id.
     """
     ai_session_id = ai.create_session(
         candidate_name=payload.candidate_name,
@@ -69,6 +78,7 @@ def create_session(db: DBSession, ai: AiClient, payload: SessionCreate) -> Inter
     )
     row = InterviewSessionRow(
         ai_session_id=ai_session_id,
+        org_id=org_id,
         candidate_name=payload.candidate_name,
         interview_type=payload.interview_type,
         position=payload.position,
@@ -92,13 +102,15 @@ def _event_to_wire(event: RawEventIn) -> dict:
     return event.model_dump(by_alias=True, exclude_none=True)
 
 
-def record_events(db: DBSession, ai: AiClient, session_id: str, events: list[RawEventIn]) -> dict:
-    """record_events: DBSession AiClient String (list-of RawEventIn) -> dict
+def record_events(
+    db: DBSession, ai: AiClient, session_id: str, events: list[RawEventIn], org_id: str
+) -> dict:
+    """record_events: DBSession AiClient String (list-of RawEventIn) String -> dict
     Purpose: forward a batch of raw interaction events to the ai/ service,
     then mirror the resulting snapshot (Trust DNA + evidence) into the
     local database. Returns the raw snapshot dict from the ai/ service.
     """
-    row = _get_or_raise(db, session_id)
+    row = _get_or_raise(db, session_id, org_id)
     snapshot = ai.post_events(row.ai_session_id, [_event_to_wire(e) for e in events])
     apply_snapshot(db, row, snapshot)
     return snapshot
@@ -157,12 +169,12 @@ def evidence_row_to_out(row: EvidenceRow) -> EvidenceOut:
     )
 
 
-def current_status(db: DBSession, ai: AiClient, session_id: str) -> TrustStatusResponse:
-    """current_status: DBSession AiClient String -> TrustStatusResponse
+def current_status(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> TrustStatusResponse:
+    """current_status: DBSession AiClient String String -> TrustStatusResponse
     Purpose: refresh `session_id` from the ai/ service and return its
     current Trust DNA / confidence / recommendation / evidence view.
     """
-    row = _get_or_raise(db, session_id)
+    row = _get_or_raise(db, session_id, org_id)
     snapshot = ai.get_snapshot(row.ai_session_id)
     apply_snapshot(db, row, snapshot)
     rec = snapshot["recommendation"]
@@ -188,20 +200,27 @@ def current_status(db: DBSession, ai: AiClient, session_id: str) -> TrustStatusR
     )
 
 
-def list_sessions(db: DBSession) -> list[InterviewSessionRow]:
-    """list_sessions: DBSession -> (list-of InterviewSessionRow)
-    Purpose: every session on record, most recently created first — the
-    Dashboard's sole data source (KPIs, charts, and activity feed are all
-    derived from this list client-side; see frontend/src/lib/session-mappers.ts).
+def list_sessions(db: DBSession, org_id: str) -> list[InterviewSessionRow]:
+    """list_sessions: DBSession String -> (list-of InterviewSessionRow)
+    Purpose: every session belonging to `org_id`, most recently created
+    first — the Dashboard's sole data source (KPIs, charts, and activity
+    feed are all derived from this list client-side; see
+    frontend/src/lib/session-mappers.ts). Scoped to the caller's own org —
+    never another org's sessions.
     """
-    return db.query(InterviewSessionRow).order_by(InterviewSessionRow.created_at.desc()).all()
+    return (
+        db.query(InterviewSessionRow)
+        .filter(InterviewSessionRow.org_id == org_id)
+        .order_by(InterviewSessionRow.created_at.desc())
+        .all()
+    )
 
 
-def end_session(db: DBSession, ai: AiClient, session_id: str) -> InterviewSessionRow:
-    """end_session: DBSession AiClient String -> InterviewSessionRow
+def end_session(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> InterviewSessionRow:
+    """end_session: DBSession AiClient String String -> InterviewSessionRow
     Purpose: pull one final snapshot, mark the session ended, and persist it.
     """
-    row = _get_or_raise(db, session_id)
+    row = _get_or_raise(db, session_id, org_id)
     snapshot = ai.get_snapshot(row.ai_session_id)
     apply_snapshot(db, row, snapshot)
     row.status = "ended"
@@ -211,23 +230,23 @@ def end_session(db: DBSession, ai: AiClient, session_id: str) -> InterviewSessio
     return row
 
 
-def build_report(db: DBSession, ai: AiClient, session_id: str) -> dict:
-    """build_report: DBSession AiClient String -> dict
+def build_report(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> dict:
+    """build_report: DBSession AiClient String String -> dict
     Purpose: fetch the ai/ service's final SessionReport for `session_id`,
     cache its executive summary locally, and return the raw report dict
     (consumed by pdf_service.render_report).
     """
-    row = _get_or_raise(db, session_id)
+    row = _get_or_raise(db, session_id, org_id)
     report = ai.get_report(row.ai_session_id)
     row.executive_summary = report["executiveSummary"]
     db.commit()
     return report
 
 
-def report_out(db: DBSession, ai: AiClient, session_id: str) -> SessionReportOut:
-    """report_out: DBSession AiClient String -> SessionReportOut
+def report_out(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> SessionReportOut:
+    """report_out: DBSession AiClient String String -> SessionReportOut
     Purpose: the Report screen's JSON view — build_report's dict already
     has the same camelCase shape as SessionReportOut's aliases, so no
     manual field mapping is needed.
     """
-    return SessionReportOut.model_validate(build_report(db, ai, session_id))
+    return SessionReportOut.model_validate(build_report(db, ai, session_id, org_id))

@@ -15,8 +15,10 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173`. Log in with the pre-filled demo credentials
-(`demo@platform.ai`) — one click, no setup required.
+Open `http://localhost:5173`. Sign in with the seeded demo account
+(`demo@platform.ai` / `demo1234`, created by `backend/scripts/seed_demo_data.py`),
+or create your own workspace via the Sign Up link — auth is real, not a
+demo gate.
 
 ## Structure
 

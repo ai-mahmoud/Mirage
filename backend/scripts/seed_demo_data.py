@@ -19,10 +19,14 @@ from datetime import datetime, timezone
 
 import httpx
 
-from mirage_backend import session_service
+from mirage_backend import auth, session_service
 from mirage_backend.ai_client import HttpAiClient
 from mirage_backend.config import DEFAULT_CONFIG
-from mirage_backend.database import InterviewSessionRow, make_engine, make_session_factory
+from mirage_backend.database import InterviewSessionRow, Organization, User, make_engine, make_session_factory
+
+DEMO_ORG_NAME = "Demo Organization"
+DEMO_EMAIL = "demo@platform.ai"
+DEMO_PASSWORD = "demo1234"  # nosec - throwaway demo-only credential, not a real secret
 
 
 def _wait_for_seed_list(ai_service_url: str, retries: int, delay_s: float) -> list[dict]:
@@ -46,6 +50,21 @@ def _wait_for_seed_list(ai_service_url: str, retries: int, delay_s: float) -> li
     return []  # unreachable, satisfies type-checkers
 
 
+def _ensure_demo_org(db) -> tuple[Organization, User]:
+    """_ensure_demo_org: DBSession -> (Organization, User)
+    Purpose: the demo org + its one login (see CLAUDE.md's stated demo
+    login, demo@platform.ai) that every seeded session belongs to.
+    Idempotent — reuses an existing demo user/org if one is already there
+    (matters if this script is ever re-run against a DB that has orgs but
+    no sessions yet).
+    """
+    existing = db.query(User).filter(User.email == DEMO_EMAIL).first()
+    if existing is not None:
+        return existing.organization, existing
+    user = auth.signup(db, DEMO_ORG_NAME, DEMO_EMAIL, DEMO_PASSWORD)
+    return user.organization, user
+
+
 def seed(db_url: str, ai_service_url: str, retries: int = 60, delay_s: float = 2.0) -> None:
     """seed: String String [Number] [Number] -> Void
     Purpose: populate `db_url` by mirroring every session ai/ seeded
@@ -61,6 +80,9 @@ def seed(db_url: str, ai_service_url: str, retries: int = 60, delay_s: float = 2
             print("Database already has data — skipping seed.")
             return
 
+        demo_org, demo_user = _ensure_demo_org(db)
+        print(f"Demo org: {demo_org.name!r}  Demo login: {demo_user.email} / {DEMO_PASSWORD}")
+
         print(f"Waiting for ai/ service at {ai_service_url} to finish seeding itself...")
         entries = _wait_for_seed_list(ai_service_url, retries, delay_s)
         print(f"Mirroring {len(entries)} seeded sessions...")
@@ -69,6 +91,7 @@ def seed(db_url: str, ai_service_url: str, retries: int = 60, delay_s: float = 2
             ai_session_id = entry["sessionId"]
             row = InterviewSessionRow(
                 ai_session_id=ai_session_id,
+                org_id=demo_org.org_id,
                 candidate_name=entry["candidateName"],
                 interview_type=entry["interviewType"] or "Technical Interview",
                 position=entry["position"],

@@ -19,13 +19,21 @@ const TITLES: Record<string, { title: string; subtitle?: string }> = {
 };
 
 export function DashboardLayout() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = React.useState(false);
 
   React.useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
+
+  // A stored token (see api-client.ts) is validated against GET /auth/me
+  // on mount — until that resolves, isAuthenticated is provisionally
+  // false even for a returning, still-logged-in user. Redirecting to
+  // /login during that window would bounce a valid session; wait for it.
+  if (isLoading) {
+    return null;
+  }
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace state={{ from: location }} />;

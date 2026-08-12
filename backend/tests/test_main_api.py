@@ -1,8 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from mirage_backend import auth
 from mirage_backend.database import make_engine, make_session_factory
-from mirage_backend.main import app, get_ai_client, get_db, get_reports_dir
+from mirage_backend.main import app, get_ai_client, get_current_user, get_db, get_reports_dir
 
 from .fakes import FakeAiClient
 
@@ -19,10 +20,18 @@ def client(tmp_path):
         finally:
             db.close()
 
+    # Most tests here exercise the session routes' own logic, not auth
+    # itself (that's test_auth.py's job) — so a fixed, always-authenticated
+    # fake user is the default override, same spirit as FakeAiClient.
+    db_for_setup = factory()
+    fake_user = auth.signup(db_for_setup, "Test Org", "test@example.com", "password123")
+    db_for_setup.close()
+
     fake_ai = FakeAiClient()
     app.dependency_overrides[get_db] = _get_db
     app.dependency_overrides[get_ai_client] = lambda: fake_ai
     app.dependency_overrides[get_reports_dir] = lambda: str(tmp_path)
+    app.dependency_overrides[get_current_user] = lambda: fake_user
     yield TestClient(app)
     app.dependency_overrides.clear()
 

@@ -7,6 +7,7 @@ A `Config` is a frozen bundle of settings the rest of the service reads:
     ai_service_url  - String, base URL of the ai/ FastAPI process
     database_url    - String, SQLAlchemy database URL
     reports_dir     - String, directory generated PDF reports are written to
+    jwt_secret_key  - String, HMAC key signing/verifying auth.py's JWTs
 
 Nothing below this module re-reads `os.environ` directly — tests build a
 `Config` by hand instead of touching the process environment.
@@ -26,6 +27,11 @@ class Config:
     # directly outside docker-compose without standing up Postgres first.
     database_url: str = "postgresql+psycopg://mirage:mirage@localhost:5432/mirage"
     reports_dir: str = "reports"
+    # Hackathon-friendly fixed default so tokens survive a dev restart.
+    # Production deployments MUST set BACKEND_JWT_SECRET to a real secret
+    # (Phase 3 covers secrets hygiene properly — this is a placeholder,
+    # not a claim that this default is safe to ship with).
+    jwt_secret_key: str = "dev-only-insecure-secret-change-me"
 
 
 def load_config() -> Config:
@@ -41,6 +47,7 @@ def load_config() -> Config:
             "BACKEND_DATABASE_URL", "postgresql+psycopg://mirage:mirage@localhost:5432/mirage"
         ),
         reports_dir=os.environ.get("BACKEND_REPORTS_DIR", "reports"),
+        jwt_secret_key=os.environ.get("BACKEND_JWT_SECRET", "dev-only-insecure-secret-change-me"),
     )
 
 

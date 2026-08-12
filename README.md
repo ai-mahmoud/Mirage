@@ -215,8 +215,9 @@ print(html.unescape(re.sub(r'<[^>]+>', '', xml)))"
 
 ### Demo Credentials
 
-- **Username**: `demo@platform.ai`
-- **Role**: HR Interviewer
+- **Email**: `demo@platform.ai`
+- **Password**: `demo1234`
+- **Role**: HR Interviewer (org owner)
 
 ### Demo Flow
 

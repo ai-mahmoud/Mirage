@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TrustDNACard } from "@/components/dashboard/trust-dna-card";
 import { NoActiveSession } from "@/components/shared/no-active-session";
-import { getReport, reportPdfUrl } from "@/lib/api-client";
+import { downloadReportPdf, getReport } from "@/lib/api-client";
 import { mapEvidenceList, mapRecommendation, mapTrustDna } from "@/lib/session-mappers";
 import { useCurrentSession } from "@/contexts/session-context";
 import { RECOMMENDATION_META, SEVERITY_META } from "@/lib/confidence";
@@ -52,7 +52,14 @@ export function ReportsPage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button size="sm" className="gap-1.5" onClick={() => window.open(reportPdfUrl(report.sessionId), "_blank")}>
+          <Button
+            size="sm"
+            className="gap-1.5"
+            onClick={async () => {
+              const objectUrl = await downloadReportPdf(report.sessionId);
+              window.open(objectUrl, "_blank");
+            }}
+          >
             <Download className="size-3.5" /> Export PDF
           </Button>
           <Button size="sm" variant="secondary" disabled className="gap-1.5">

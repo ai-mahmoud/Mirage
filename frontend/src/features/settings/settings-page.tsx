@@ -12,17 +12,17 @@ export function SettingsPage() {
         <CardHeader>
           <div>
             <CardTitle>Workspace</CardTitle>
-            <CardDescription>Hackathon demo workspace — organization management is a post-hackathon roadmap item.</CardDescription>
+            <CardDescription>Your account and organization.</CardDescription>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Name</Label>
-            <Input value={user?.name ?? ""} readOnly />
-          </div>
-          <div>
             <Label>Email</Label>
             <Input value={user?.email ?? ""} readOnly />
+          </div>
+          <div>
+            <Label>Role</Label>
+            <Input value={user?.role ?? ""} readOnly />
           </div>
           <div>
             <Label>Organization</Label>

@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/layouts/dashboard-layout";
 import { AuthLayout } from "@/layouts/auth-layout";
 import { LandingPage } from "@/features/landing/landing-page";
 import { LoginPage } from "@/features/auth/login-page";
+import { SignupPage } from "@/features/auth/signup-page";
 import { DashboardPage } from "@/features/dashboard/dashboard-page";
 import { LiveSessionPage } from "@/features/live-session/live-session-page";
 import { TrustDnaPage } from "@/features/trust-dna/trust-dna-page";
@@ -19,7 +20,10 @@ export const router = createBrowserRouter(
     { path: "/", element: <LandingPage /> },
     {
       element: <AuthLayout />,
-      children: [{ path: "/login", element: <LoginPage /> }],
+      children: [
+        { path: "/login", element: <LoginPage /> },
+        { path: "/signup", element: <SignupPage /> },
+      ],
     },
     {
       element: <DashboardLayout />,

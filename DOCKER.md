@@ -53,8 +53,9 @@ First run takes a few minutes (downloading base images, installing
 dependencies, building the frontend). Subsequent runs are much faster.
 
 Once it settles, open **http://localhost:5173** in a browser. Log in with
-anything (it's a demo gate, any input works) and you'll land on a
-Dashboard already populated with 6 sessions.
+the seeded demo account (`demo@platform.ai` / `demo1234`) and you'll land
+on a Dashboard already populated with 45 sessions belonging to that
+account's organization.
 
 To run it in the background instead of tying up your terminal:
 

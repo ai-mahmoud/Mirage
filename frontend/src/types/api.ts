@@ -133,3 +133,29 @@ export interface CreateSessionPayload {
   department?: string;
   observerName?: string;
 }
+
+// --- auth ---
+
+export interface UserResponseRaw {
+  userId: string;
+  orgId: string;
+  email: string;
+  role: string;
+}
+
+export interface TokenResponseRaw {
+  accessToken: string;
+  tokenType: "bearer";
+  user: UserResponseRaw;
+}
+
+export interface SignupPayload {
+  orgName: string;
+  email: string;
+  password: string;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}

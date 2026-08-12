@@ -57,7 +57,7 @@ Signals follow a unified metadata schema: `{signalId, category, timestamp, value
 Exactly **four screens**, one continuous journey (Landing → Login → Dashboard → Create Session → Live Session → Report → Export):
 
 1. **Landing** — value prop in <8s; CTA "Start Demo".
-2. **Dashboard** — KPI cards, engine status, activity feed; CTA "Start Behavioral Session". Demo login: `demo@platform.ai`.
+2. **Dashboard** — KPI cards, engine status, activity feed; CTA "Start Behavioral Session". Real signup/login (self-serve, multi-tenant); a seeded demo account (`demo@platform.ai` / `demo1234`) exists for quick evaluation.
 3. **Live Session** — ~70% of the judging experience. Layout: session header / Trust DNA + Timeline + Evidence Feed / Live Signals + Recommendation Panel. Always-visible privacy card. Everything updates live (dashboard latency < 1s, signal stream every second).
 4. **Session Report** — executive summary, Trust DNA bars, evidence table, recommendation, privacy summary. Export: PDF only (CSV/JSON buttons disabled).
 

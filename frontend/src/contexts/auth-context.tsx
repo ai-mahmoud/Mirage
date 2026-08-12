@@ -1,62 +1,82 @@
 import * as React from "react";
+import { ApiError, getMe, login as apiLogin, setAuthToken, signup as apiSignup } from "@/lib/api-client";
+import type { UserResponseRaw } from "@/types/api";
 
 interface AuthUser {
   name: string;
   email: string;
   initials: string;
   organization: string;
+  role: string;
 }
 
 interface AuthContextValue {
   user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
+  isLoading: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  signup: (orgName: string, email: string, password: string) => Promise<void>;
   logout: () => void;
 }
 
-const DEMO_USER: AuthUser = {
-  name: "Demo Observer",
-  email: "demo@platform.ai",
-  initials: "DO",
-  organization: "MAAT Hackathon Workspace",
-};
+function toAuthUser(raw: UserResponseRaw, orgName?: string): AuthUser {
+  const namePart = raw.email.split("@")[0] ?? raw.email;
+  return {
+    name: namePart,
+    email: raw.email,
+    initials: namePart.slice(0, 2).toUpperCase(),
+    organization: orgName ?? raw.orgId,
+    role: raw.role,
+  };
+}
 
 const AuthContext = React.createContext<AuthContextValue | undefined>(undefined);
 
-const STORAGE_KEY = "maat_demo_session";
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = React.useState<AuthUser | null>(() => {
-    try {
-      return sessionStorage.getItem(STORAGE_KEY) ? DEMO_USER : null;
-    } catch {
-      return null;
-    }
-  });
+  const [user, setUser] = React.useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
 
-  const login = React.useCallback(async (_email: string, _password: string) => {
-    await new Promise((r) => setTimeout(r, 500));
-    setUser(DEMO_USER);
-    try {
-      sessionStorage.setItem(STORAGE_KEY, "1");
-    } catch {
-      /* noop */
-    }
-    return true;
+  // On mount, a token surviving from a previous session (see
+  // api-client.ts's localStorage persistence) is validated against
+  // GET /auth/me rather than trusted blindly — an expired/revoked token
+  // should bounce back to the login screen, not render a stale session.
+  React.useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((raw) => {
+        if (!cancelled) setUser(toAuthUser(raw));
+      })
+      .catch(() => {
+        if (!cancelled) setAuthToken(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const login = React.useCallback(async (email: string, password: string) => {
+    const resp = await apiLogin({ email, password });
+    setAuthToken(resp.accessToken);
+    setUser(toAuthUser(resp.user));
+  }, []);
+
+  const signup = React.useCallback(async (orgName: string, email: string, password: string) => {
+    const resp = await apiSignup({ orgName, email, password });
+    setAuthToken(resp.accessToken);
+    setUser(toAuthUser(resp.user, orgName));
   }, []);
 
   const logout = React.useCallback(() => {
+    setAuthToken(null);
     setUser(null);
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* noop */
-    }
   }, []);
 
   const value = React.useMemo(
-    () => ({ user, isAuthenticated: !!user, login, logout }),
-    [user, login, logout]
+    () => ({ user, isAuthenticated: !!user, isLoading, login, signup, logout }),
+    [user, isLoading, login, signup, logout]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -67,3 +87,5 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
+
+export { ApiError };

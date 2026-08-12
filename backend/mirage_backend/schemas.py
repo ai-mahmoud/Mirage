@@ -24,6 +24,54 @@ class ApiModel(BaseModel):
     model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
 
 
+# --- Auth / organizations -----------------------------------------------
+
+
+class SignupRequest(ApiModel):
+    """A SignupRequest creates a brand-new Organization plus its first
+    User (role "owner") in one step — there is no separate "create an
+    org" flow; self-serve signup always creates both together."""
+
+    org_name: str
+    email: str
+    password: str
+
+
+class LoginRequest(ApiModel):
+    email: str
+    password: str
+
+
+class UserResponse(ApiModel):
+    """A UserResponse is what a client is told about the authenticated
+    user — never includes hashed_password."""
+
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+
+    user_id: str
+    org_id: str
+    email: str
+    role: str
+
+
+class TokenResponse(ApiModel):
+    """A TokenResponse is what POST /auth/signup and /auth/login return:
+    a bearer JWT plus the user it identifies, so the client doesn't need
+    a second round-trip to GET /auth/me right after logging in."""
+
+    access_token: str
+    token_type: Literal["bearer"] = "bearer"
+    user: UserResponse
+
+
+class OrganizationResponse(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+
+    org_id: str
+    name: str
+    plan_tier: str
+
+
 # --- Session -----------------------------------------------------------
 
 
