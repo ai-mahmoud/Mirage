@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ai-tests:
+    name: ai/ tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install ai/ dependencies
+        working-directory: ai
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e ".[dev]"
+      - name: Run ai/ tests
+        working-directory: ai
+        run: .venv/bin/pytest -q
+
+  backend-tests:
+    name: backend/ tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend/ dependencies
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e ".[dev]"
+      - name: Run backend/ tests
+        working-directory: backend
+        run: .venv/bin/pytest -q
+
+  migrations-dry-run:
+    name: Alembic migrations (fresh Postgres)
+    runs-on: ubuntu-latest
+    # Both services share one logical database in production
+    # (docker-compose.yml's postgres service) but track their own
+    # migration history in separate version tables (see
+    # ai/migrations/env.py and backend/migrations/env.py) — this job
+    # proves `alembic upgrade head` succeeds from an empty database for
+    # both, the way a real first deploy would.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: mirage
+          POSTGRES_PASSWORD: mirage
+          POSTGRES_DB: mirage
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mirage -d mirage"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ai/ dependencies
+        working-directory: ai
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e .
+      - name: ai/ — alembic upgrade head
+        working-directory: ai
+        env:
+          AI_DATABASE_URL: postgresql+psycopg://mirage:mirage@localhost:5432/mirage
+        run: .venv/bin/alembic upgrade head
+
+      - name: Install backend/ dependencies
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e .
+      - name: backend/ — alembic upgrade head
+        working-directory: backend
+        env:
+          BACKEND_DATABASE_URL: postgresql+psycopg://mirage:mirage@localhost:5432/mirage
+        run: .venv/bin/alembic upgrade head
+
+  frontend:
+    name: frontend/ lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build

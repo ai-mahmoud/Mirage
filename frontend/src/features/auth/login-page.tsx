@@ -4,7 +4,8 @@ import { motion } from "framer-motion";
 import { Loader2, LogIn } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input, Label, FieldError } from "@/components/ui/input";
-import { ApiError, useAuth } from "@/contexts/auth-context";
+import { useAuth } from "@/contexts/auth-context";
+import { ApiError } from "@/lib/api-client";
 
 export function LoginPage() {
   const [email, setEmail] = React.useState("");

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ApiError, getMe, login as apiLogin, setAuthToken, signup as apiSignup } from "@/lib/api-client";
+import { getMe, login as apiLogin, setAuthToken, signup as apiSignup } from "@/lib/api-client";
 import type { UserResponseRaw } from "@/types/api";
 
 interface AuthUser {
@@ -87,5 +87,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-
-export { ApiError };
