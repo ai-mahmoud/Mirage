@@ -9,8 +9,11 @@ from __future__ import annotations
 import time
 import uuid
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from .engine import SessionEngine
 from .schemas import (
@@ -25,14 +28,29 @@ from .seed import PROFILES, seed_sessions
 from .settings import DEFAULT_SETTINGS
 from .store import PostgresSessionStore, SessionStore
 
-app = FastAPI(title="Mirage AI", version="0.1.0")
+app = FastAPI(
+    title="Mirage AI",
+    version="0.1.0",
+    # /docs, /redoc, and the raw OpenAPI schema are dev conveniences, not
+    # something a production deployment should expose to the internet.
+    docs_url="/docs" if DEFAULT_SETTINGS.environment != "production" else None,
+    redoc_url="/redoc" if DEFAULT_SETTINGS.environment != "production" else None,
+    openapi_url="/openapi.json" if DEFAULT_SETTINGS.environment != "production" else None,
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=DEFAULT_SETTINGS.cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# In the real architecture only backend/ creates ai/ sessions
+# (server-to-server), but this guards against a misconfigured or
+# compromised caller flooding session creation directly.
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Built lazily (on first real get_store() call) rather than at import
 # time — importing this module must not require a live database
@@ -78,8 +96,9 @@ def health() -> dict:
 
 
 @app.post("/sessions", response_model=CreateSessionResponse)
+@limiter.limit("60/minute")
 def create_session(
-    req: CreateSessionRequest, store: SessionStore = Depends(get_store)
+    request: Request, req: CreateSessionRequest, store: SessionStore = Depends(get_store)
 ) -> CreateSessionResponse:
     session_id = uuid.uuid4().hex
     started_at = time.time() * 1000.0

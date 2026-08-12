@@ -13,6 +13,9 @@ import httpx
 from fastapi import Depends, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session as DBSession
 
 from . import auth, session_service
@@ -32,8 +35,26 @@ from .schemas import (
     UserResponse,
 )
 
-app = FastAPI(title="Mirage Backend", version="0.1.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app = FastAPI(
+    title="Mirage Backend",
+    version="0.1.0",
+    # /docs, /redoc, and the raw OpenAPI schema are dev conveniences, not
+    # something a production deployment should expose to the internet.
+    docs_url="/docs" if DEFAULT_CONFIG.environment != "production" else None,
+    redoc_url="/redoc" if DEFAULT_CONFIG.environment != "production" else None,
+    openapi_url="/openapi.json" if DEFAULT_CONFIG.environment != "production" else None,
+)
+app.add_middleware(
+    CORSMiddleware, allow_origins=DEFAULT_CONFIG.cors_origins, allow_methods=["*"], allow_headers=["*"]
+)
+
+# Rate limiting: credential-guessing and session-flooding are the two
+# things worth throttling here. Keyed by remote address — coarse, but
+# this is a single-instance deployment with no trusted proxy chain to
+# parse X-Forwarded-For from yet (revisit once behind a real LB).
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Built lazily (on first real get_db() call) rather than at import time —
 # importing this module must not require a live database connection, since
@@ -127,14 +148,16 @@ def health() -> dict:
 
 
 @app.post("/auth/signup", response_model=TokenResponse)
-def signup(payload: SignupRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("20/minute")
+def signup(request: Request, payload: SignupRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
     user = auth.signup(db, payload.org_name, payload.email, payload.password)
     token = auth.create_access_token(user, DEFAULT_CONFIG.jwt_secret_key)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
 
 
 @app.post("/auth/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
+@limiter.limit("20/minute")
+def login(request: Request, payload: LoginRequest, db: DBSession = Depends(get_db)) -> TokenResponse:
     user = auth.login(db, payload.email, payload.password)
     token = auth.create_access_token(user, DEFAULT_CONFIG.jwt_secret_key)
     return TokenResponse(access_token=token, user=UserResponse.model_validate(user))
@@ -157,7 +180,9 @@ def get_me(user: User = Depends(get_current_user)) -> UserResponse:
 
 
 @app.post("/sessions", response_model=SessionResponse)
+@limiter.limit("30/minute")
 def create_session(
+    request: Request,
     payload: SessionCreate,
     db: DBSession = Depends(get_db),
     ai: AiClient = Depends(get_ai_client),

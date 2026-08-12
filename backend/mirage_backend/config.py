@@ -8,6 +8,9 @@ A `Config` is a frozen bundle of settings the rest of the service reads:
     database_url    - String, SQLAlchemy database URL
     reports_dir     - String, directory generated PDF reports are written to
     jwt_secret_key  - String, HMAC key signing/verifying auth.py's JWTs
+    cors_origins    - (list-of String), browser origins allowed to call this API
+    environment     - String, "development" | "production" — gates /docs
+                       exposure (see main.py); not read anywhere else
 
 Nothing below this module re-reads `os.environ` directly — tests build a
 `Config` by hand instead of touching the process environment.
@@ -16,7 +19,21 @@ Nothing below this module re-reads `os.environ` directly — tests build a
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173,http://localhost:3000,https://ai-mahmoud.github.io"
+)
+
+
+def _parse_origins(raw: str) -> list[str]:
+    """_parse_origins: String -> (list-of String)
+    Purpose: split a comma-separated origins string into a clean list,
+    dropping empty entries (a trailing comma or blank env var shouldn't
+    produce a `[""]` allowlist that then matches nothing *and* looks
+    non-empty).
+    """
+    return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 @dataclass(frozen=True)
@@ -29,9 +46,10 @@ class Config:
     reports_dir: str = "reports"
     # Hackathon-friendly fixed default so tokens survive a dev restart.
     # Production deployments MUST set BACKEND_JWT_SECRET to a real secret
-    # (Phase 3 covers secrets hygiene properly — this is a placeholder,
-    # not a claim that this default is safe to ship with).
+    # (this default is a placeholder, not a claim that it's safe to ship with).
     jwt_secret_key: str = "dev-only-insecure-secret-change-me"
+    cors_origins: list[str] = field(default_factory=lambda: _parse_origins(DEFAULT_CORS_ORIGINS))
+    environment: str = "development"
 
 
 def load_config() -> Config:
@@ -48,6 +66,8 @@ def load_config() -> Config:
         ),
         reports_dir=os.environ.get("BACKEND_REPORTS_DIR", "reports"),
         jwt_secret_key=os.environ.get("BACKEND_JWT_SECRET", "dev-only-insecure-secret-change-me"),
+        cors_origins=_parse_origins(os.environ.get("BACKEND_CORS_ORIGINS", DEFAULT_CORS_ORIGINS)),
+        environment=os.environ.get("BACKEND_ENVIRONMENT", "development"),
     )
 
 

@@ -15,6 +15,7 @@ dependencies = [
     "reportlab>=4.1",
     "bcrypt>=4.1",
     "pyjwt>=2.8",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]
