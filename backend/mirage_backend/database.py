@@ -15,6 +15,11 @@ all be served without re-calling the AI service on every read.
 An `EvidenceRow` represents one EvidenceCard mirrored from the ai/
 service, keyed by the ai/ service's own evidence id (`ai_evidence_id`) so
 mirroring the same card twice never creates a duplicate row.
+
+An `Organization` is one customer account and a `User` belongs to exactly
+one Organization (multi-tenancy groundwork — schema only for now, see
+migrations/versions/0002_orgs_and_users.py; nothing enforces `org_id`
+scoping yet, that's real auth's job).
 """
 
 from __future__ import annotations
@@ -43,11 +48,48 @@ def now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class Organization(Base):
+    """An Organization is one customer account (multi-tenancy root —
+    Phase 1 of the production-readiness roadmap). `plan_tier` is a
+    placeholder for Phase 6's billing work; nothing reads it yet."""
+
+    __tablename__ = "organizations"
+
+    org_id = Column(String, primary_key=True, default=new_id)
+    name = Column(String, nullable=False)
+    plan_tier = Column(String, nullable=False, default="free")
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+
+    users = relationship("User", back_populates="organization")
+    sessions = relationship("InterviewSessionRow", back_populates="organization")
+
+
+class User(Base):
+    """A User belongs to exactly one Organization. Schema only for now —
+    no route reads or enforces this yet; Phase 2 (real auth) is what
+    issues credentials, checks `hashed_password`, and scopes every
+    `/sessions*` query by `org_id`."""
+
+    __tablename__ = "users"
+
+    user_id = Column(String, primary_key=True, default=new_id)
+    org_id = Column(String, ForeignKey("organizations.org_id"), nullable=False)
+    email = Column(String, nullable=False, unique=True)
+    hashed_password = Column(String, nullable=False)
+    role = Column(String, nullable=False, default="member")
+    created_at = Column(DateTime, nullable=False, default=now_utc)
+
+    organization = relationship("Organization", back_populates="users")
+
+
 class InterviewSessionRow(Base):
     __tablename__ = "sessions"
 
     session_id = Column(String, primary_key=True, default=new_id)
     ai_session_id = Column(String, nullable=True)
+    # Nullable until Phase 2 (real auth) makes every session creation
+    # request carry an authenticated org — see migrations/versions/0002.
+    org_id = Column(String, ForeignKey("organizations.org_id"), nullable=True)
 
     candidate_name = Column(String, nullable=False)
     interview_type = Column(String, nullable=False)
@@ -69,6 +111,7 @@ class InterviewSessionRow(Base):
     executive_summary = Column(String, nullable=True)
 
     evidence = relationship("EvidenceRow", back_populates="session", order_by="EvidenceRow.timestamp")
+    organization = relationship("Organization", back_populates="sessions")
 
     @property
     def evidence_count(self) -> int:

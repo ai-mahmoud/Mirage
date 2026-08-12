@@ -51,7 +51,7 @@ Environment variables (all optional, see `config.py`):
 | Variable | Default |
 |---|---|
 | `AI_SERVICE_URL` | `http://localhost:8000` |
-| `BACKEND_DATABASE_URL` | `sqlite:///./backend.db` |
+| `BACKEND_DATABASE_URL` | `postgresql+psycopg://mirage:mirage@localhost:5432/mirage` |
 | `BACKEND_REPORTS_DIR` | `reports` |
 
 ## Tests

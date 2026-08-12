@@ -1,9 +1,30 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mirage
+      POSTGRES_PASSWORD: mirage
+      POSTGRES_DB: mirage
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mirage -d mirage"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+
   ai:
     build:
       context: ./ai
     ports:
       - "8000:8000"
+    environment:
+      AI_DATABASE_URL: postgresql+psycopg://mirage:mirage@postgres:5432/mirage
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
       interval: 5s
@@ -19,11 +40,13 @@ services:
       - "8001:8001"
     environment:
       AI_SERVICE_URL: http://ai:8000
-      BACKEND_DATABASE_URL: sqlite:////data/backend.db
+      BACKEND_DATABASE_URL: postgresql+psycopg://mirage:mirage@postgres:5432/mirage
       BACKEND_REPORTS_DIR: /data/reports
     volumes:
-      - backend_data:/data
+      - backend_reports:/data/reports
     depends_on:
+      postgres:
+        condition: service_healthy
       ai:
         condition: service_healthy
     healthcheck:
@@ -46,4 +69,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  backend_data:
+  postgres_data:
+  backend_reports:

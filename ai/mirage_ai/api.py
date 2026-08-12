@@ -1,6 +1,7 @@
 """FastAPI surface for the AI stream. This is the contract backend/frontend
-teammates integrate against — see ai/README.md. Session state is in-memory
-and process-local, which is sufficient for a single-instance hackathon demo.
+teammates integrate against — see ai/README.md. Session state is
+persisted via a SessionStore (store.py) — a Postgres-backed store in
+normal operation, so a restart or scale-out no longer drops live sessions.
 """
 
 from __future__ import annotations
@@ -8,7 +9,7 @@ from __future__ import annotations
 import time
 import uuid
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .engine import SessionEngine
@@ -21,6 +22,8 @@ from .schemas import (
     SessionSnapshot,
 )
 from .seed import PROFILES, seed_sessions
+from .settings import DEFAULT_SETTINGS
+from .store import PostgresSessionStore, SessionStore
 
 app = FastAPI(title="Mirage AI", version="0.1.0")
 
@@ -31,19 +34,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_sessions: dict[str, SessionEngine] = {}
+# Built lazily (on first real get_store() call) rather than at import
+# time — importing this module must not require a live database
+# connection, since tests override get_store entirely via
+# app.dependency_overrides and never invoke this one at all.
+_store: SessionStore | None = None
+
+
+def get_store() -> SessionStore:
+    global _store
+    if _store is None:
+        _store = PostgresSessionStore(DEFAULT_SETTINGS.database_url)
+    return _store
 
 
 @app.on_event("startup")
 def _seed_demo_history() -> None:
     """Populate a fresh instance with a handful of realistic finished
     sessions (see seed.py) so backend/'s own seed script has something
-    real to mirror — a no-op if sessions already exist."""
-    seed_sessions(_sessions)
+    real to mirror — a no-op if the store already has sessions in it.
+    seed_sessions() itself is untouched (still builds into a plain dict,
+    per its own tests) — we just fan the result out into the real store.
+    """
+    store = get_store()
+    if store.list_ids():
+        return
+    sessions: dict[str, SessionEngine] = {}
+    seed_sessions(sessions)
+    for engine in sessions.values():
+        store.save(engine)
 
 
-def _get_session(session_id: str) -> SessionEngine:
-    engine = _sessions.get(session_id)
+def _get_session(store: SessionStore, session_id: str) -> SessionEngine:
+    engine = store.get(session_id)
     if engine is None:
         raise HTTPException(status_code=404, detail="Session not found")
     return engine
@@ -55,10 +78,12 @@ def health() -> dict:
 
 
 @app.post("/sessions", response_model=CreateSessionResponse)
-def create_session(req: CreateSessionRequest) -> CreateSessionResponse:
+def create_session(
+    req: CreateSessionRequest, store: SessionStore = Depends(get_store)
+) -> CreateSessionResponse:
     session_id = uuid.uuid4().hex
     started_at = time.time() * 1000.0
-    _sessions[session_id] = SessionEngine(
+    engine = SessionEngine(
         session_id=session_id,
         candidate_name=req.candidate_name,
         observer_name=req.observer_name,
@@ -69,39 +94,51 @@ def create_session(req: CreateSessionRequest) -> CreateSessionResponse:
         seed=req.seed,
         started_at=started_at,
     )
+    store.save(engine)
     return CreateSessionResponse(session_id=session_id, started_at=started_at, demo=req.demo)
 
 
 @app.post("/sessions/{session_id}/events", response_model=SessionSnapshot)
-def ingest_events(session_id: str, req: IngestRequest) -> SessionSnapshot:
-    engine = _get_session(session_id)
+def ingest_events(
+    session_id: str, req: IngestRequest, store: SessionStore = Depends(get_store)
+) -> SessionSnapshot:
+    engine = _get_session(store, session_id)
     engine.ingest(req.events)
-    return engine.tick()
+    snapshot = engine.tick()
+    store.save(engine)
+    return snapshot
 
 
 @app.get("/sessions/{session_id}", response_model=SessionSnapshot)
-def get_session(session_id: str) -> SessionSnapshot:
-    return _get_session(session_id).tick()
+def get_session(session_id: str, store: SessionStore = Depends(get_store)) -> SessionSnapshot:
+    engine = _get_session(store, session_id)
+    snapshot = engine.tick()
+    store.save(engine)  # tick() mutates timeline/trust history even on a plain read
+    return snapshot
 
 
 @app.get("/sessions/{session_id}/report", response_model=SessionReport)
-def get_report(session_id: str) -> SessionReport:
-    return _get_session(session_id).finalize()
+def get_report(session_id: str, store: SessionStore = Depends(get_store)) -> SessionReport:
+    engine = _get_session(store, session_id)
+    report = engine.finalize()
+    store.save(engine)
+    return report
 
 
 @app.delete("/sessions/{session_id}")
-def end_session(session_id: str) -> dict:
-    engine = _get_session(session_id)
-    del _sessions[session_id]
+def end_session(session_id: str, store: SessionStore = Depends(get_store)) -> dict:
+    engine = _get_session(store, session_id)
+    store.delete(session_id)
     return {"status": "deleted", "session_id": engine.session_id}
 
 
 @app.get("/seed/sessions", response_model=list[SeedSessionInfo])
-def list_seed_sessions() -> list[SeedSessionInfo]:
-    """Bootstrap-only: the id/identity list for whatever this process
+def list_seed_sessions(store: SessionStore = Depends(get_store)) -> list[SeedSessionInfo]:
+    """Bootstrap-only: the id/identity list for whatever this store
     seeded at startup, so backend/'s own seed script can mirror them
     without hand-duplicating PROFILES. Not part of the product's real
     request-serving contract."""
+    seeded_ids = set(store.list_ids())
     return [
         SeedSessionInfo(
             session_id=p["session_id"],
@@ -113,5 +150,5 @@ def list_seed_sessions() -> list[SeedSessionInfo]:
             live=p["live"],
         )
         for p in PROFILES
-        if p["session_id"] in _sessions
+        if p["session_id"] in seeded_ids
     ]

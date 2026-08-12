@@ -782,6 +782,106 @@ class SessionEngine:
         self._last_snapshot = snapshot
         return snapshot
 
+    # -- persistence ------------------------------------------------------
+    # A SessionEngine used to live only in a process-local dict (api.py's
+    # old `_sessions`), so a restart or scale-out silently dropped every
+    # live session's evidence. to_state()/from_state() round-trip the
+    # engine's full private state through a JSON-safe dict so a
+    # SessionStore (see store.py) can persist and rehydrate it exactly —
+    # same buffers, same baseline, same evidence/timeline/trust history,
+    # same demo-replay position, no gaps.
+
+    def to_state(self) -> dict:
+        """to_state: -> dict
+        Purpose: serialize this engine's full state to a JSON-safe dict.
+        Inverse of from_state — `SessionEngine.from_state(e.to_state())`
+        continues ticking exactly where `e` left off.
+        """
+        return {
+            "session_id": self.session_id,
+            "candidate_name": self.candidate_name,
+            "observer_name": self.observer_name,
+            "position": self.position,
+            "department": self.department,
+            "interview_type": self.interview_type,
+            "demo_mode": self.demo_mode,
+            "started_at": self.started_at,
+            "ended_at": self.ended_at,
+            "moves": [list(m) for m in self._moves],
+            "clicks": list(self._clicks),
+            "scrolls": [list(s) for s in self._scrolls],
+            "key_downs": list(self._key_downs),
+            "focus_lost": list(self._focus_lost),
+            "focus_gained": list(self._focus_gained),
+            "visibility": [list(v) for v in self._visibility],
+            "all_interaction_times": list(self._all_interaction_times),
+            "total_events": self.total_events,
+            "baseline": self._baseline,
+            "trust_scores": self._trust_scores,
+            "last_evidence_at": self._last_evidence_at,
+            "evidence": [e.model_dump(mode="json") for e in self._evidence],
+            "timeline": [t.model_dump(mode="json") for t in self._timeline],
+            "trust_history": [s.model_dump(mode="json") for s in self._trust_history],
+            "last_signals": {k: s.model_dump(mode="json") for k, s in self._last_signals.items()},
+            "last_status": self._last_status,
+            "last_tick_ms": self._last_tick_ms,
+            "last_snapshot": self._last_snapshot.model_dump(mode="json") if self._last_snapshot else None,
+            "final_report": self._final_report.model_dump(mode="json") if self._final_report else None,
+            "demo_events": [e.model_dump(mode="json") for e in self._demo_events],
+            "demo_next_idx": self._demo_next_idx,
+        }
+
+    @classmethod
+    def from_state(cls, state: dict, config: EngineConfig = DEFAULT_CONFIG) -> "SessionEngine":
+        """from_state: dict [EngineConfig] -> SessionEngine
+        Purpose: rebuild an engine from to_state()'s output. Restores
+        demo_mode/started_at via the constructor's own demo-event
+        generation path only when to_state() recorded none were pulled yet
+        (a fresh demo session); otherwise the stored demo_events/
+        demo_next_idx take over so a restart never re-plays from scratch.
+        """
+        engine = cls(
+            session_id=state["session_id"],
+            candidate_name=state["candidate_name"],
+            observer_name=state["observer_name"],
+            position=state["position"],
+            department=state["department"],
+            interview_type=state["interview_type"],
+            demo_mode=False,  # avoid regenerating a fresh demo script below
+            seed=None,
+            config=config,
+            started_at=state["started_at"],
+        )
+        engine.demo_mode = state["demo_mode"]
+        engine.ended_at = state["ended_at"]
+        engine._moves = [tuple(m) for m in state["moves"]]
+        engine._clicks = list(state["clicks"])
+        engine._scrolls = [tuple(s) for s in state["scrolls"]]
+        engine._key_downs = list(state["key_downs"])
+        engine._focus_lost = list(state["focus_lost"])
+        engine._focus_gained = list(state["focus_gained"])
+        engine._visibility = [tuple(v) for v in state["visibility"]]
+        engine._all_interaction_times = list(state["all_interaction_times"])
+        engine.total_events = state["total_events"]
+        engine._baseline = state["baseline"]
+        engine._trust_scores = state["trust_scores"]
+        engine._last_evidence_at = state["last_evidence_at"]
+        engine._evidence = [EvidenceCard.model_validate(e) for e in state["evidence"]]
+        engine._timeline = [TimelineEvent.model_validate(t) for t in state["timeline"]]
+        engine._trust_history = [TrustDnaSample.model_validate(s) for s in state["trust_history"]]
+        engine._last_signals = {k: Signal.model_validate(s) for k, s in state["last_signals"].items()}
+        engine._last_status = state["last_status"]
+        engine._last_tick_ms = state["last_tick_ms"]
+        engine._last_snapshot = (
+            SessionSnapshot.model_validate(state["last_snapshot"]) if state["last_snapshot"] else None
+        )
+        engine._final_report = (
+            SessionReport.model_validate(state["final_report"]) if state["final_report"] else None
+        )
+        engine._demo_events = [RawEvent.model_validate(e) for e in state["demo_events"]]
+        engine._demo_next_idx = state["demo_next_idx"]
+        return engine
+
     def finalize(self, now: float | None = None) -> SessionReport:
         """finalize: [Number] -> SessionReport
         Purpose: run one last tick, mark the session ended, and build the

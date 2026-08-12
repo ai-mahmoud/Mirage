@@ -25,13 +25,24 @@ from .schemas import EventBatch, SessionCreate, SessionReportOut, SessionRespons
 app = FastAPI(title="Mirage Backend", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
-_engine = make_engine(DEFAULT_CONFIG.database_url)
-_session_factory = make_session_factory(_engine)
+# Built lazily (on first real get_db() call) rather than at import time —
+# importing this module must not require a live database connection, since
+# tests override get_db entirely via app.dependency_overrides and never
+# invoke this one at all.
+_session_factory = None
 _ai_client: AiClient = HttpAiClient(DEFAULT_CONFIG.ai_service_url)
 
 
+def _get_session_factory():
+    global _session_factory
+    if _session_factory is None:
+        engine = make_engine(DEFAULT_CONFIG.database_url)
+        _session_factory = make_session_factory(engine)
+    return _session_factory
+
+
 def get_db():
-    db = _session_factory()
+    db = _get_session_factory()()
     try:
         yield db
     finally:

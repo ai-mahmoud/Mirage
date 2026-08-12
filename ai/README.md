@@ -125,7 +125,7 @@ recommendation, timeline, and the fixed privacy statement.
 
 ### `DELETE /sessions/{sessionId}`
 
-Drop a session from the in-memory store.
+Drop a session from the store.
 
 ### `GET /health`
 
@@ -133,9 +133,11 @@ Liveness check.
 
 ## Notes for integrators
 
-- State is in-memory and per-process — restarting the AI service loses all
-  sessions. Fine for a single-instance hackathon demo; call out before
-  relying on it for anything longer-lived.
+- Session state is persisted via a `SessionStore` (see `mirage_ai/store.py`)
+  — a Postgres-backed store (`AI_DATABASE_URL`) in normal operation, so a
+  restart or horizontal scale-out no longer drops live sessions. An
+  in-memory store is still available for tests/local dev that don't want a
+  database dependency.
 - All response bodies are camelCase (the wire format); the Python code
   underneath is snake_case (`alias_generator=to_camel`).
 - `min_events_for_analysis` (25) gates everything: below that, every

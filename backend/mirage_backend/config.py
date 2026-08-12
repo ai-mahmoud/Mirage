@@ -21,7 +21,10 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Config:
     ai_service_url: str = "http://localhost:8000"
-    database_url: str = "sqlite:///./backend.db"
+    # Postgres is the real backing store (see docker-compose.yml's postgres
+    # service); sqlite is kept only as a fallback for running mirage_backend
+    # directly outside docker-compose without standing up Postgres first.
+    database_url: str = "postgresql+psycopg://mirage:mirage@localhost:5432/mirage"
     reports_dir: str = "reports"
 
 
@@ -34,7 +37,9 @@ def load_config() -> Config:
     """
     return Config(
         ai_service_url=os.environ.get("AI_SERVICE_URL", "http://localhost:8000"),
-        database_url=os.environ.get("BACKEND_DATABASE_URL", "sqlite:///./backend.db"),
+        database_url=os.environ.get(
+            "BACKEND_DATABASE_URL", "postgresql+psycopg://mirage:mirage@localhost:5432/mirage"
+        ),
         reports_dir=os.environ.get("BACKEND_REPORTS_DIR", "reports"),
     )
 

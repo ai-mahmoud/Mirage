@@ -4,6 +4,8 @@ WORKDIR /app
 COPY pyproject.toml ./
 COPY mirage_backend ./mirage_backend
 COPY scripts ./scripts
+COPY alembic.ini ./
+COPY migrations ./migrations
 COPY docker-entrypoint.sh ./
 
 # The sed strips CRLF line endings picked up by Windows checkouts
