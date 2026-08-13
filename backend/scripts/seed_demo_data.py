@@ -56,12 +56,19 @@ def _ensure_demo_org(db) -> tuple[Organization, User]:
     login, demo@platform.ai) that every seeded session belongs to.
     Idempotent — reuses an existing demo user/org if one is already there
     (matters if this script is ever re-run against a DB that has orgs but
-    no sessions yet).
+    no sessions yet). Seeded on the "pro" tier deliberately: the free
+    tier's session-creation limit (billing_service.PLAN_LIMITS) is meant
+    to gate real customers, not this account — the seeded 45 sessions
+    already fill most of a calendar month's free-tier quota, and the
+    demo's whole point is showing a judge a *new* live session get
+    created, which a free-tier demo account would immediately 402 on.
     """
     existing = db.query(User).filter(User.email == DEMO_EMAIL).first()
     if existing is not None:
         return existing.organization, existing
     user = auth.signup(db, DEMO_ORG_NAME, DEMO_EMAIL, DEMO_PASSWORD)
+    user.organization.plan_tier = "pro"
+    db.commit()
     return user.organization, user
 
 

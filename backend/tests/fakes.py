@@ -1,16 +1,25 @@
-"""FakeAiClient: a hand-written AiClient test double.
+"""FakeAiClient / FakeStripeClient: hand-written test doubles.
 
 Purpose: let session_service / API tests exercise the full flow without a
-real ai/ process. It reproduces just enough of the ai/ engine's observable
-behavior — trust drops once enough events have been recorded, and any
-evidence injected via `inject_evidence` shows up in the next snapshot — to
-test the backend's own mirroring logic. It does not re-test the ai/
-engine's signal/evidence reasoning; that is ai/'s own test suite's job.
+real ai/ process or a real Stripe account. FakeAiClient reproduces just
+enough of the ai/ engine's observable behavior — trust drops once enough
+events have been recorded, and any evidence injected via
+`inject_evidence` shows up in the next snapshot — to test the backend's
+own mirroring logic. It does not re-test the ai/ engine's signal/evidence
+reasoning; that is ai/'s own test suite's job. FakeStripeClient similarly
+reproduces just enough of Stripe's observable behavior (issuing
+customer/session ids, and — critically — real signature verification, so
+webhook tests exercise the same crypto a real attacker would have to
+defeat) to test billing_service's own logic.
 """
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import itertools
+import json
+import time
 
 _ids = itertools.count(1)
 
@@ -111,3 +120,60 @@ class FakeAiClient:
             "currentRisk": "review" if status == "manual_review_recommended" else "low",
             "timeline": [],
         }
+
+
+def sign_stripe_payload(payload: bytes, secret: str, timestamp: int | None = None) -> str:
+    """Test helper: build a real Stripe-Signature header value for
+    `payload` signed with `secret` — Stripe's actual v1 HMAC-SHA256
+    scheme (timestamp + "." + payload, signed), not a fake shortcut."""
+    ts = timestamp if timestamp is not None else int(time.time())
+    signed_payload = f"{ts}.".encode() + payload
+    signature = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return f"t={ts},v1={signature}"
+
+
+def _verify_stripe_signature(payload: bytes, signature_header: str, secret: str) -> bool:
+    """Mirrors Stripe's own verification algorithm exactly — the inverse
+    of sign_stripe_payload above."""
+    parts = dict(p.split("=", 1) for p in signature_header.split(",") if "=" in p)
+    ts, sig = parts.get("t"), parts.get("v1")
+    if not ts or not sig:
+        return False
+    signed_payload = f"{ts}.".encode() + payload
+    expected = hmac.new(secret.encode(), signed_payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, sig)
+
+
+class FakeStripeClient:
+    """A StripeClient double: mints predictable customer/checkout/portal
+    ids and URLs, and performs REAL signature verification (see
+    _verify_stripe_signature) rather than rubber-stamping every payload
+    — so webhook tests exercise genuine tamper detection, not just the
+    happy path."""
+
+    def __init__(self) -> None:
+        self.customers: dict[str, dict] = {}
+        self.checkout_calls: list[dict] = []
+        self.portal_calls: list[dict] = []
+
+    def create_customer(self, *, email: str, org_id: str) -> str:
+        customer_id = f"cus_{next(_ids)}"
+        self.customers[customer_id] = {"email": email, "org_id": org_id}
+        return customer_id
+
+    def create_checkout_session(self, *, customer_id: str, price_id: str, success_url: str, cancel_url: str) -> str:
+        self.checkout_calls.append(
+            {"customer_id": customer_id, "price_id": price_id, "success_url": success_url, "cancel_url": cancel_url}
+        )
+        return f"https://checkout.stripe.test/session/{next(_ids)}"
+
+    def create_billing_portal_session(self, *, customer_id: str, return_url: str) -> str:
+        self.portal_calls.append({"customer_id": customer_id, "return_url": return_url})
+        return f"https://billing.stripe.test/portal/{next(_ids)}"
+
+    def construct_webhook_event(self, *, payload: bytes, signature_header: str, webhook_secret: str) -> dict:
+        from mirage_backend.billing_client import WebhookVerificationError
+
+        if not _verify_stripe_signature(payload, signature_header, webhook_secret):
+            raise WebhookVerificationError("signature mismatch")
+        return json.loads(payload)

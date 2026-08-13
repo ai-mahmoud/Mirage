@@ -50,14 +50,22 @@ def now_utc() -> datetime:
 
 class Organization(Base):
     """An Organization is one customer account (multi-tenancy root —
-    Phase 1 of the production-readiness roadmap). `plan_tier` is a
-    placeholder for Phase 6's billing work; nothing reads it yet."""
+    Phase 1 of the production-readiness roadmap). `plan_tier` gates
+    session-creation limits (see billing_service.PLAN_LIMITS);
+    `stripe_customer_id`/`subscription_status` are set once the org's
+    first checkout completes (see billing_service.py) — both are None
+    for an org that's never started a paid plan."""
 
     __tablename__ = "organizations"
 
     org_id = Column(String, primary_key=True, default=new_id)
     name = Column(String, nullable=False)
     plan_tier = Column(String, nullable=False, default="free")
+    stripe_customer_id = Column(String, nullable=True, unique=True)
+    # None (never subscribed) | "active" | "trialing" | "past_due" | "canceled"
+    # — Stripe's own subscription.status values, mirrored verbatim so
+    # webhook handling never needs a translation table.
+    subscription_status = Column(String, nullable=True)
     created_at = Column(DateTime, nullable=False, default=now_utc)
 
     users = relationship("User", back_populates="organization")

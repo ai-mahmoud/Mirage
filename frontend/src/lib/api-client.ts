@@ -4,7 +4,9 @@
 import type {
   CreateSessionPayload,
   LoginPayload,
+  OrganizationResponseRaw,
   RawEventOut,
+  RedirectUrlResponseRaw,
   SessionReportRaw,
   SessionResponseRaw,
   SignupPayload,
@@ -80,6 +82,20 @@ export function login(payload: LoginPayload): Promise<TokenResponseRaw> {
 
 export function getMe(): Promise<UserResponseRaw> {
   return apiFetch("/auth/me");
+}
+
+// --- billing ---
+
+export function getMyOrganization(): Promise<OrganizationResponseRaw> {
+  return apiFetch("/organizations/me");
+}
+
+export function startCheckout(plan: "pro" = "pro"): Promise<RedirectUrlResponseRaw> {
+  return apiFetch("/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) });
+}
+
+export function startBillingPortal(): Promise<RedirectUrlResponseRaw> {
+  return apiFetch("/billing/portal", { method: "POST" });
 }
 
 // --- sessions ---

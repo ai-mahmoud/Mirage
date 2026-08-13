@@ -21,16 +21,20 @@ from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
 
-from . import auth, session_service
+from . import auth, billing_service, session_service
 from .ai_client import AiClient, HttpAiClient
+from .billing_client import BillingNotConfigured, RealStripeClient, StripeClient, WebhookVerificationError
 from .config import DEFAULT_CONFIG
-from .database import User, make_engine, make_session_factory
+from .database import Organization, User, make_engine, make_session_factory
 from .logging_config import configure_logging
 from .pdf_service import render_report
 from .request_context import RequestIdMiddleware, get_request_id
 from .schemas import (
+    CheckoutRequest,
     EventBatch,
     LoginRequest,
+    OrganizationResponse,
+    RedirectUrlResponse,
     SessionCreate,
     SessionReportOut,
     SessionResponse,
@@ -102,6 +106,23 @@ def get_reports_dir() -> str:
     return DEFAULT_CONFIG.reports_dir
 
 
+# Built lazily, same reasoning as _get_session_factory: importing this
+# module must not require billing to be configured. Unlike the ai/
+# client, there's no sensible default to fall back to when unconfigured
+# — get_stripe_client just raises, and the billing routes' exception
+# handler turns that into a clean 503 rather than a crash.
+_stripe_client: StripeClient | None = None
+
+
+def get_stripe_client() -> StripeClient:
+    global _stripe_client
+    if not DEFAULT_CONFIG.stripe_secret_key:
+        raise BillingNotConfigured("billing is not configured on this deployment")
+    if _stripe_client is None:
+        _stripe_client = RealStripeClient(DEFAULT_CONFIG.stripe_secret_key)
+    return _stripe_client
+
+
 def get_current_user(
     authorization: str | None = Header(default=None), db: DBSession = Depends(get_db)
 ) -> User:
@@ -140,6 +161,34 @@ def handle_authorization_error(request: Request, exc: auth.AuthorizationError) -
 @app.exception_handler(auth.EmailAlreadyRegistered)
 def handle_email_already_registered(request: Request, exc: auth.EmailAlreadyRegistered) -> JSONResponse:
     return JSONResponse(status_code=409, content={"detail": f"Email already registered: {exc}"})
+
+
+@app.exception_handler(billing_service.PlanLimitExceeded)
+def handle_plan_limit_exceeded(request: Request, exc: billing_service.PlanLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=402, content={"detail": str(exc)})
+
+
+@app.exception_handler(billing_service.OrganizationNotFound)
+def handle_organization_not_found(request: Request, exc: billing_service.OrganizationNotFound) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": f"Organization not found: {exc}"})
+
+
+@app.exception_handler(billing_service.NoStripeCustomer)
+def handle_no_stripe_customer(request: Request, exc: billing_service.NoStripeCustomer) -> JSONResponse:
+    return JSONResponse(
+        status_code=404, content={"detail": "No billing account yet — start a checkout first"}
+    )
+
+
+@app.exception_handler(BillingNotConfigured)
+def handle_billing_not_configured(request: Request, exc: BillingNotConfigured) -> JSONResponse:
+    return JSONResponse(status_code=503, content={"detail": str(exc)})
+
+
+@app.exception_handler(WebhookVerificationError)
+def handle_webhook_verification_error(request: Request, exc: WebhookVerificationError) -> JSONResponse:
+    logger.warning("rejected webhook with invalid signature: %s", exc)
+    return JSONResponse(status_code=400, content={"detail": "invalid webhook signature"})
 
 
 @app.exception_handler(httpx.HTTPError)
@@ -224,6 +273,63 @@ def logout() -> dict:
 @app.get("/auth/me", response_model=UserResponse)
 def get_me(user: User = Depends(get_current_user)) -> UserResponse:
     return UserResponse.model_validate(user)
+
+
+@app.get("/organizations/me", response_model=OrganizationResponse)
+def get_my_organization(
+    db: DBSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> OrganizationResponse:
+    org = db.get(Organization, user.org_id)
+    return OrganizationResponse.model_validate(org)
+
+
+# --- Billing ---------------------------------------------------------------
+
+
+@app.post("/billing/checkout", response_model=RedirectUrlResponse)
+def start_checkout(
+    payload: CheckoutRequest,
+    db: DBSession = Depends(get_db),
+    stripe: StripeClient = Depends(get_stripe_client),
+    user: User = Depends(get_current_user),
+) -> RedirectUrlResponse:
+    # Only one paid plan exists today (see CheckoutRequest), so the price
+    # id is read straight from config rather than trusting a client-sent
+    # value — nothing about which Stripe Price gets charged should ever
+    # come from the request body.
+    price_id = DEFAULT_CONFIG.stripe_price_id_pro
+    if not price_id:
+        raise BillingNotConfigured("no Stripe price configured for the pro plan")
+    url = billing_service.start_checkout(db, stripe, user.org_id, user.email, price_id)
+    return RedirectUrlResponse(url=url)
+
+
+@app.post("/billing/portal", response_model=RedirectUrlResponse)
+def start_billing_portal(
+    db: DBSession = Depends(get_db),
+    stripe: StripeClient = Depends(get_stripe_client),
+    user: User = Depends(get_current_user),
+) -> RedirectUrlResponse:
+    url = billing_service.start_billing_portal(db, stripe, user.org_id)
+    return RedirectUrlResponse(url=url)
+
+
+@app.post("/billing/webhook")
+async def billing_webhook(
+    request: Request,
+    stripe_signature: str = Header(default="", alias="Stripe-Signature"),
+    db: DBSession = Depends(get_db),
+    stripe: StripeClient = Depends(get_stripe_client),
+) -> dict:
+    # Deliberately no get_current_user here — Stripe calls this, not a
+    # logged-in browser. The signature check (construct_webhook_event) is
+    # what authenticates the request instead of a bearer token.
+    payload = await request.body()
+    event = stripe.construct_webhook_event(
+        payload=payload, signature_header=stripe_signature, webhook_secret=DEFAULT_CONFIG.stripe_webhook_secret
+    )
+    billing_service.apply_webhook_event(db, event)
+    return {"status": "ok"}
 
 
 # --- Sessions (every route below is scoped to the caller's own org) ------

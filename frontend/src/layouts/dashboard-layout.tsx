@@ -15,6 +15,7 @@ const TITLES: Record<string, { title: string; subtitle?: string }> = {
   "/recommendations": { title: "Recommendations", subtitle: "Human decision support" },
   "/reports": { title: "Session Report", subtitle: "Executive decision summary" },
   "/privacy": { title: "Privacy Center", subtitle: "Privacy by design, always visible" },
+  "/pricing": { title: "Plans", subtitle: "Choose the plan that fits your team" },
   "/settings": { title: "Settings", subtitle: "Workspace preferences" },
 };
 

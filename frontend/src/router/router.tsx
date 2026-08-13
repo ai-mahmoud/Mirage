@@ -12,6 +12,7 @@ import { TimelinePage } from "@/features/timeline/timeline-page";
 import { RecommendationsPage } from "@/features/recommendations/recommendations-page";
 import { ReportsPage } from "@/features/reports/reports-page";
 import { PrivacyPage } from "@/features/privacy/privacy-page";
+import { PricingPage } from "@/features/pricing/pricing-page";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { NotFoundPage } from "@/features/shared/not-found-page";
 
@@ -36,6 +37,7 @@ export const router = createBrowserRouter(
         { path: "/recommendations", element: <RecommendationsPage /> },
         { path: "/reports", element: <ReportsPage /> },
         { path: "/privacy", element: <PrivacyPage /> },
+        { path: "/pricing", element: <PricingPage /> },
         { path: "/settings", element: <SettingsPage /> },
       ],
     },

@@ -155,6 +155,19 @@ export interface SignupPayload {
   password: string;
 }
 
+// --- billing ---
+
+export interface OrganizationResponseRaw {
+  orgId: string;
+  name: string;
+  planTier: string;
+  subscriptionStatus: string | null;
+}
+
+export interface RedirectUrlResponseRaw {
+  url: string;
+}
+
 export interface LoginPayload {
   email: string;
   password: string;

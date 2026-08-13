@@ -24,6 +24,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session as DBSession
 
+from . import billing_service
 from .ai_client import AiClient
 from .database import EvidenceRow, InterviewSessionRow, now_utc
 from .schemas import (
@@ -68,7 +69,14 @@ def create_session(
     Example:
       create_session(db, fake_ai, SessionCreate(candidate_name="Ada", interview_type="Technical Interview"), org_id="org-1")
       produces a row with status == "active", org_id == "org-1", and a non-empty ai_session_id.
+
+    Checked before anything else — raises billing_service.PlanLimitExceeded
+    without ever registering a session with ai/ if the org's plan tier
+    has hit its monthly cap, so a rejected request never leaves an
+    orphaned ai/ session behind.
     """
+    billing_service.check_session_limit(db, org_id)
+
     ai_session_id = ai.create_session(
         candidate_name=payload.candidate_name,
         observer_name=payload.observer_name or "Interviewer",

@@ -13,6 +13,15 @@ A `Config` is a frozen bundle of settings the rest of the service reads:
                        exposure (see main.py)
     sentry_dsn      - String, Sentry error-tracking DSN; "" (default)
                        disables Sentry entirely — see main.py
+    stripe_secret_key    - String, Stripe API secret key; "" (default)
+                            disables billing entirely — see billing_client.py
+    stripe_webhook_secret - String, signing secret for verifying
+                            POST /billing/webhook came from Stripe
+    stripe_price_id_pro  - String, the Stripe Price id checkout sessions
+                            are created against for the "pro" plan
+    frontend_base_url    - String, the deployed frontend's origin —
+                            checkout/portal success & cancel redirects
+                            point back here
 
 Nothing below this module re-reads `os.environ` directly — tests build a
 `Config` by hand instead of touching the process environment.
@@ -53,6 +62,10 @@ class Config:
     cors_origins: list[str] = field(default_factory=lambda: _parse_origins(DEFAULT_CORS_ORIGINS))
     environment: str = "development"
     sentry_dsn: str = ""
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_id_pro: str = ""
+    frontend_base_url: str = "http://localhost:5173"
 
 
 def load_config() -> Config:
@@ -72,6 +85,10 @@ def load_config() -> Config:
         cors_origins=_parse_origins(os.environ.get("BACKEND_CORS_ORIGINS", DEFAULT_CORS_ORIGINS)),
         environment=os.environ.get("BACKEND_ENVIRONMENT", "development"),
         sentry_dsn=os.environ.get("BACKEND_SENTRY_DSN", ""),
+        stripe_secret_key=os.environ.get("BACKEND_STRIPE_SECRET_KEY", ""),
+        stripe_webhook_secret=os.environ.get("BACKEND_STRIPE_WEBHOOK_SECRET", ""),
+        stripe_price_id_pro=os.environ.get("BACKEND_STRIPE_PRICE_ID_PRO", ""),
+        frontend_base_url=os.environ.get("BACKEND_FRONTEND_BASE_URL", "http://localhost:5173"),
     )
 
 

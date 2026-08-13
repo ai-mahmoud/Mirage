@@ -70,6 +70,24 @@ class OrganizationResponse(ApiModel):
     org_id: str
     name: str
     plan_tier: str
+    subscription_status: Optional[str] = None
+
+
+class CheckoutRequest(ApiModel):
+    """A CheckoutRequest names which plan to subscribe to. Only "pro"
+    exists today — a single-plan product doesn't need a price list in
+    the request, but the field is here so a second paid tier doesn't
+    require a breaking API change."""
+
+    plan: Literal["pro"] = "pro"
+
+
+class RedirectUrlResponse(ApiModel):
+    """What POST /billing/checkout and POST /billing/portal both return:
+    a URL to send the browser to (Stripe's own hosted checkout/portal
+    page) — the frontend does `window.location.href = url`."""
+
+    url: str
 
 
 # --- Session -----------------------------------------------------------
