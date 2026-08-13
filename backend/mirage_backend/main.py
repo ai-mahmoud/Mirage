@@ -21,7 +21,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.orm import Session as DBSession
 
-from . import auth, billing_service, session_service
+from . import auth, billing_service, consent_service, data_rights_service, session_service
 from .ai_client import AiClient, HttpAiClient
 from .billing_client import BillingNotConfigured, RealStripeClient, StripeClient, WebhookVerificationError
 from .config import DEFAULT_CONFIG
@@ -31,6 +31,8 @@ from .pdf_service import render_report
 from .request_context import RequestIdMiddleware, get_request_id
 from .schemas import (
     CheckoutRequest,
+    ConsentRequest,
+    ConsentResponse,
     EventBatch,
     LoginRequest,
     OrganizationResponse,
@@ -185,6 +187,28 @@ def handle_billing_not_configured(request: Request, exc: BillingNotConfigured) -
     return JSONResponse(status_code=503, content={"detail": str(exc)})
 
 
+@app.exception_handler(consent_service.ConsentRequired)
+def handle_consent_required(request: Request, exc: consent_service.ConsentRequired) -> JSONResponse:
+    return JSONResponse(status_code=428, content={"detail": str(exc)})
+
+
+@app.exception_handler(consent_service.UnknownDocument)
+def handle_unknown_document(request: Request, exc: consent_service.UnknownDocument) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": f"Unknown legal document: {exc}"})
+
+
+@app.exception_handler(consent_service.StaleConsentVersion)
+def handle_stale_consent_version(request: Request, exc: consent_service.StaleConsentVersion) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
+
+
+@app.exception_handler(data_rights_service.NotOrganizationOwner)
+def handle_not_organization_owner(request: Request, exc: data_rights_service.NotOrganizationOwner) -> JSONResponse:
+    return JSONResponse(
+        status_code=403, content={"detail": "Only the organization's owner can delete it"}
+    )
+
+
 @app.exception_handler(WebhookVerificationError)
 def handle_webhook_verification_error(request: Request, exc: WebhookVerificationError) -> JSONResponse:
     logger.warning("rejected webhook with invalid signature: %s", exc)
@@ -283,6 +307,44 @@ def get_my_organization(
     return OrganizationResponse.model_validate(org)
 
 
+@app.get("/users/me/export")
+def export_my_data(db: DBSession = Depends(get_db), user: User = Depends(get_current_user)) -> dict:
+    """The right-to-access half of GDPR/CCPA: a full JSON dump of
+    everything this deployment holds about the caller's org (see
+    data_rights_service.export_organization_data)."""
+    return data_rights_service.export_organization_data(db, user.org_id)
+
+
+@app.delete("/organizations/me")
+def delete_my_organization(
+    db: DBSession = Depends(get_db),
+    ai: AiClient = Depends(get_ai_client),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """The right-to-deletion half of GDPR/CCPA — owner-only (see
+    data_rights_service.delete_organization), irreversible."""
+    data_rights_service.delete_organization(db, ai, user.org_id, user)
+    return {"status": "deleted"}
+
+
+# --- Legal / consent ---------------------------------------------------------
+
+
+@app.post("/consent", response_model=ConsentResponse)
+def accept_consent(
+    payload: ConsentRequest, db: DBSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> ConsentResponse:
+    row = consent_service.record_consent(db, user.user_id, payload.document, payload.version)
+    return ConsentResponse.model_validate(row)
+
+
+@app.get("/consent/status")
+def get_consent_status(
+    db: DBSession = Depends(get_db), user: User = Depends(get_current_user)
+) -> dict[str, bool]:
+    return consent_service.consent_status(db, user.user_id)
+
+
 # --- Billing ---------------------------------------------------------------
 
 
@@ -344,7 +406,7 @@ def create_session(
     ai: AiClient = Depends(get_ai_client),
     user: User = Depends(get_current_user),
 ) -> SessionResponse:
-    return session_service.create_session(db, ai, payload, user.org_id)
+    return session_service.create_session(db, ai, payload, user.org_id, user.user_id)
 
 
 @app.get("/sessions", response_model=list[SessionResponse])
@@ -394,6 +456,18 @@ def get_report(
     user: User = Depends(get_current_user),
 ) -> SessionReportOut:
     return session_service.report_out(db, ai, session_id, user.org_id)
+
+
+@app.delete("/sessions/{session_id}")
+def delete_session(
+    session_id: str,
+    db: DBSession = Depends(get_db),
+    ai: AiClient = Depends(get_ai_client),
+    user: User = Depends(get_current_user),
+) -> dict:
+    """Right-to-deletion for a single session (Phase 7) — irreversible."""
+    session_service.delete_session(db, ai, session_id, user.org_id)
+    return {"status": "deleted", "sessionId": session_id}
 
 
 @app.get("/sessions/{session_id}/report/pdf")

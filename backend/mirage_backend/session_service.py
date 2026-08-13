@@ -20,11 +20,11 @@ database and a FakeAiClient (tests/fakes.py) instead of a live ai/ process.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session as DBSession
 
-from . import billing_service
+from . import billing_service, consent_service
 from .ai_client import AiClient
 from .database import EvidenceRow, InterviewSessionRow, now_utc
 from .schemas import (
@@ -60,21 +60,30 @@ def _get_or_raise(db: DBSession, session_id: str, org_id: str | None = None) -> 
 
 
 def create_session(
-    db: DBSession, ai: AiClient, payload: SessionCreate, org_id: str
+    db: DBSession, ai: AiClient, payload: SessionCreate, org_id: str, user_id: str
 ) -> InterviewSessionRow:
-    """create_session: DBSession AiClient SessionCreate String -> InterviewSessionRow
+    """create_session: DBSession AiClient SessionCreate String String -> InterviewSessionRow
     Purpose: open a new interview session — create its mirrored session in
     the ai/ service first, then persist the local record pointing at it,
     scoped to the authenticated caller's org.
     Example:
-      create_session(db, fake_ai, SessionCreate(candidate_name="Ada", interview_type="Technical Interview"), org_id="org-1")
+      create_session(db, fake_ai, SessionCreate(candidate_name="Ada", interview_type="Technical Interview"), org_id="org-1", user_id="user-1")
       produces a row with status == "active", org_id == "org-1", and a non-empty ai_session_id.
 
-    Checked before anything else — raises billing_service.PlanLimitExceeded
-    without ever registering a session with ai/ if the org's plan tier
-    has hit its monthly cap, so a rejected request never leaves an
-    orphaned ai/ session behind.
+    Checked before anything else, in order — each raises without ever
+    registering a session with ai/ (or, for consent, without even
+    checking the plan limit) if its own precondition fails, so a
+    rejected request never leaves an orphaned ai/ session behind:
+      1. consent_service.ConsentRequired — the caller hasn't accepted the
+         current session_tracking_notice yet (Phase 7: tracking must be
+         disclosed before it starts, not after).
+      2. billing_service.PlanLimitExceeded — the org's plan tier has hit
+         its monthly session cap.
     """
+    if not consent_service.has_current_consent(db, user_id, "session_tracking_notice"):
+        raise consent_service.ConsentRequired(
+            "accept the current session-tracking notice before starting a session"
+        )
     billing_service.check_session_limit(db, org_id)
 
     ai_session_id = ai.create_session(
@@ -258,3 +267,52 @@ def report_out(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> Ses
     manual field mapping is needed.
     """
     return SessionReportOut.model_validate(build_report(db, ai, session_id, org_id))
+
+
+def delete_session(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> None:
+    """delete_session: DBSession AiClient String String -> Void
+    Purpose: permanently remove `session_id` — its EvidenceRows, the
+    session row itself, and its mirrored copy on ai/ — Phase 7's
+    right-to-deletion story for a single session. Raises SessionNotFound
+    (same org-scoping as every other handler here) if it doesn't exist
+    or belongs to another org.
+    """
+    row = _get_or_raise(db, session_id, org_id)
+    for evidence in list(row.evidence):
+        db.delete(evidence)
+    ai_session_id = row.ai_session_id
+    db.delete(row)
+    db.commit()
+    if ai_session_id:
+        ai.delete_session(ai_session_id)
+
+
+def purge_expired_sessions(db: DBSession, ai: AiClient, retention_days: int) -> int:
+    """purge_expired_sessions: DBSession AiClient int -> int
+    Purpose: delete every session (across all orgs) created more than
+    `retention_days` ago, and its mirrored ai/ copy — Phase 7's data-
+    retention story, meant to be run periodically (see
+    scripts/purge_expired_sessions.py), not from a request handler.
+    Returns how many sessions were deleted, for the caller to log.
+    Best-effort on the ai/ side: a session already gone there (or ai/
+    unreachable for one id) doesn't abort the rest of the purge — the
+    backend row being gone is what the retention promise is actually
+    about; failing to also clean up ai/'s copy of one row is logged
+    material for a human, not a reason to keep everything else around.
+    """
+    cutoff = now_utc() - timedelta(days=retention_days)
+    expired = db.query(InterviewSessionRow).filter(InterviewSessionRow.created_at < cutoff).all()
+    count = 0
+    for row in expired:
+        ai_session_id = row.ai_session_id
+        for evidence in list(row.evidence):
+            db.delete(evidence)
+        db.delete(row)
+        db.commit()
+        if ai_session_id:
+            try:
+                ai.delete_session(ai_session_id)
+            except Exception:  # noqa: BLE001 - see docstring: don't abort the purge over one ai/ failure
+                pass
+        count += 1
+    return count

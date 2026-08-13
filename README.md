@@ -276,13 +276,19 @@ For detailed development guidance, see [CLAUDE.md](CLAUDE.md).
 
 ## License
 
-[Add license information]
+Proprietary — All Rights Reserved. See [LICENSE](LICENSE). This is commercial software; no open-source license is granted.
 
 ---
 
 ## Support & Contact
 
 For questions or clarifications on product vision, architecture, or principles, refer to the [CLAUDE.md](CLAUDE.md) file or the MVP BIBLE specification.
+
+For account, billing, privacy, or data-request questions: support@mirage-platform.example
+(placeholder — swap for a real support inbox before this is shown to a real customer; see
+[frontend/src/features/legal/privacy-policy-page.tsx](frontend/src/features/legal/privacy-policy-page.tsx)
+and [terms-of-service-page.tsx](frontend/src/features/legal/terms-of-service-page.tsx), which use the
+same placeholder and must be updated together with this line).
 
 ---
 

@@ -46,6 +46,14 @@ class AiClient(Protocol):
         """-> the final SessionReport (dict)."""
         ...
 
+    def delete_session(self, ai_session_id: str) -> None:
+        """Drop `ai_session_id` from ai/'s store. Used by
+        session_service's own delete/retention-purge — deleting a
+        session from backend/'s database without also deleting its
+        mirrored copy on ai/ would leave that data behind exactly where
+        the "right to deletion" story is supposed to reach."""
+        ...
+
 
 class HttpAiClient:
     """HttpAiClient: String [timeout: Number] [transport: httpx.BaseTransport] -> AiClient
@@ -105,3 +113,11 @@ class HttpAiClient:
         resp = self._client.get(f"/sessions/{ai_session_id}/report")
         resp.raise_for_status()
         return resp.json()
+
+    def delete_session(self, ai_session_id: str) -> None:
+        resp = self._client.delete(f"/sessions/{ai_session_id}")
+        # A session already gone from ai/ (e.g. a retry, or ai/'s own
+        # data separately expired) isn't a failure from the caller's
+        # perspective — the end state (gone) is what deletion wants.
+        if resp.status_code != 404:
+            resp.raise_for_status()

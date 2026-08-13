@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -6,7 +7,8 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Input, Label, Select, FieldError } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { createSession } from "@/lib/api-client";
+import { acceptConsent, createSession } from "@/lib/api-client";
+import { CURRENT_VERSIONS } from "@/features/legal/versions";
 
 const schema = z.object({
   candidateName: z.string().min(2, "Candidate name is required."),
@@ -14,6 +16,9 @@ const schema = z.object({
   position: z.string().optional(),
   department: z.string().optional(),
   observerName: z.string().min(2, "Observer name is required."),
+  trackingDisclosed: z.boolean().refine((v) => v === true, {
+    message: "Confirm the candidate has been informed before starting.",
+  }),
 });
 
 export type CreateSessionValues = z.infer<typeof schema>;
@@ -39,12 +44,23 @@ export function CreateSessionForm({
       position: "",
       department: "",
       observerName: "Demo Observer",
+      trackingDisclosed: false,
     },
   });
 
   const onSubmit = async (values: CreateSessionValues) => {
     setSubmitError(null);
     try {
+      // Re-affirms consent at the actual moment tracking starts, not just
+      // at signup (see auth.py's signup() for the account-creation-time
+      // grant) — idempotent, so this is just an extra audit-trail entry
+      // tied to this specific session, not a new gate.
+      await acceptConsent({
+        document: "session_tracking_notice",
+        version: CURRENT_VERSIONS.sessionTrackingNotice,
+      }).catch(() => {
+        /* best-effort — the account-creation-time consent already covers this */
+      });
       const created = await createSession({
         candidateName: values.candidateName,
         interviewType: values.interviewType,
@@ -103,6 +119,27 @@ export function CreateSessionForm({
               <Label htmlFor="observerName">Observer Name</Label>
               <Input id="observerName" {...register("observerName")} />
               <FieldError>{errors.observerName?.message}</FieldError>
+            </div>
+
+            <div className="rounded-[var(--radius-input)] border border-turquoise-200 bg-turquoise-50 p-3.5">
+              <label htmlFor="trackingDisclosed" className="flex items-start gap-2.5 text-xs text-charcoal-700">
+                <input
+                  id="trackingDisclosed"
+                  type="checkbox"
+                  className="mt-0.5 size-4 shrink-0 rounded border-charcoal-300 text-nile-800 focus-visible:outline-nile-700"
+                  {...register("trackingDisclosed")}
+                />
+                <span>
+                  I confirm the candidate has been informed that behavioral interaction metadata
+                  (mouse, keyboard timing, focus) will be collected during this session — never keystroke
+                  content, audio, or video. See the{" "}
+                  <Link to="/legal/privacy-policy" target="_blank" className="font-medium text-nile-700 hover:underline">
+                    Privacy Policy
+                  </Link>
+                  .
+                </span>
+              </label>
+              <FieldError>{errors.trackingDisclosed?.message}</FieldError>
             </div>
 
             {submitError && <p className="text-sm text-crimson-600">{submitError}</p>}

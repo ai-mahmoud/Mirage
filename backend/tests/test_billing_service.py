@@ -31,33 +31,43 @@ def ai():
 
 
 @pytest.fixture
-def org(db):
-    user = auth.signup(db, "Acme Inc", "ada@acme.com", "password123")
+def user(db):
+    return auth.signup(db, "Acme Inc", "ada@acme.com", "password123")
+
+
+@pytest.fixture
+def org(user):
     return user.organization
+
+
+def _create(db, ai, user, **overrides):
+    defaults = dict(candidate_name="Ada")
+    defaults.update(overrides)
+    return session_service.create_session(db, ai, SessionCreate(**defaults), user.org_id, user.user_id)
 
 
 # --- check_session_limit -----------------------------------------------
 
 
-def test_free_tier_blocks_creation_past_its_limit(db, ai, org):
+def test_free_tier_blocks_creation_past_its_limit(db, ai, user, org):
     limit = billing_service.PLAN_LIMITS["free"]
     for _ in range(limit):
-        session_service.create_session(db, ai, SessionCreate(candidate_name="Ada"), org.org_id)
+        _create(db, ai, user)
 
     with pytest.raises(billing_service.PlanLimitExceeded):
-        session_service.create_session(db, ai, SessionCreate(candidate_name="One Too Many"), org.org_id)
+        _create(db, ai, user, candidate_name="One Too Many")
 
 
-def test_pro_tier_has_no_limit(db, ai, org):
+def test_pro_tier_has_no_limit(db, ai, user, org):
     org.plan_tier = "pro"
     db.commit()
     limit = billing_service.PLAN_LIMITS["free"]
     for i in range(limit + 3):
-        session_service.create_session(db, ai, SessionCreate(candidate_name=f"Candidate {i}"), org.org_id)
+        _create(db, ai, user, candidate_name=f"Candidate {i}")
     # no exception — pro is unlimited
 
 
-def test_limit_only_counts_the_current_calendar_month(db, ai, org):
+def test_limit_only_counts_the_current_calendar_month(db, ai, user, org):
     limit = billing_service.PLAN_LIMITS["free"]
     last_month = datetime.now(timezone.utc).replace(day=1) - timedelta(days=1)
     for _ in range(limit):
@@ -73,7 +83,7 @@ def test_limit_only_counts_the_current_calendar_month(db, ai, org):
 
     # A full free-tier quota of *last* month's sessions shouldn't count
     # against this month's limit.
-    session_service.create_session(db, ai, SessionCreate(candidate_name="Fresh Month"), org.org_id)
+    _create(db, ai, user, candidate_name="Fresh Month")
 
 
 def test_unknown_org_raises_organization_not_found(db):

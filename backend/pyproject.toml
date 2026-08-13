@@ -2,6 +2,7 @@
 name = "mirage-backend"
 version = "0.1.0"
 description = "Mirage backend — session persistence, PDF export, proxy to the ai/ evidence-synthesis service"
+license = { text = "Proprietary" }
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",

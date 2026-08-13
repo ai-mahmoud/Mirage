@@ -126,6 +126,24 @@ class InterviewSessionRow(Base):
         return len(self.evidence)
 
 
+class UserConsent(Base):
+    """A UserConsent is one record of a User accepting one versioned
+    legal document (see legal.py for the current version strings) —
+    Phase 7 of the production-readiness roadmap. Never updated in
+    place: accepting a newer version of the same document inserts a new
+    row rather than overwriting the old one, so there's always a full
+    acceptance history to point to if it's ever disputed."""
+
+    __tablename__ = "user_consents"
+
+    id = Column(String, primary_key=True, default=new_id)
+    user_id = Column(String, ForeignKey("users.user_id"), nullable=False)
+    # "terms_of_service" | "privacy_policy" | "session_tracking_notice"
+    document = Column(String, nullable=False)
+    version = Column(String, nullable=False)
+    accepted_at = Column(DateTime, nullable=False, default=now_utc)
+
+
 class EvidenceRow(Base):
     __tablename__ = "evidence"
 

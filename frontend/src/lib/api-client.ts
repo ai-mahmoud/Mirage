@@ -2,6 +2,9 @@
 // named functions from here — never calls fetch() directly — so the
 // wire contract has exactly one place to change if it drifts.
 import type {
+  ConsentRequestPayload,
+  ConsentResponseRaw,
+  ConsentStatusRaw,
   CreateSessionPayload,
   LoginPayload,
   OrganizationResponseRaw,
@@ -96,6 +99,30 @@ export function startCheckout(plan: "pro" = "pro"): Promise<RedirectUrlResponseR
 
 export function startBillingPortal(): Promise<RedirectUrlResponseRaw> {
   return apiFetch("/billing/portal", { method: "POST" });
+}
+
+// --- legal / consent ---
+
+export function acceptConsent(payload: ConsentRequestPayload): Promise<ConsentResponseRaw> {
+  return apiFetch("/consent", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export function getConsentStatus(): Promise<ConsentStatusRaw> {
+  return apiFetch("/consent/status");
+}
+
+// --- data rights (GDPR/CCPA) ---
+
+export function exportMyData(): Promise<unknown> {
+  return apiFetch("/users/me/export");
+}
+
+export function deleteMyOrganization(): Promise<{ status: string }> {
+  return apiFetch("/organizations/me", { method: "DELETE" });
+}
+
+export function deleteSession(sessionId: string): Promise<{ status: string }> {
+  return apiFetch(`/sessions/${sessionId}`, { method: "DELETE" });
 }
 
 // --- sessions ---

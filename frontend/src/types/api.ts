@@ -168,6 +168,21 @@ export interface RedirectUrlResponseRaw {
   url: string;
 }
 
+// --- legal / consent ---
+
+export interface ConsentRequestPayload {
+  document: "terms_of_service" | "privacy_policy" | "session_tracking_notice";
+  version: string;
+}
+
+export interface ConsentResponseRaw {
+  document: string;
+  version: string;
+  acceptedAt: string;
+}
+
+export type ConsentStatusRaw = Record<string, boolean>;
+
 export interface LoginPayload {
   email: string;
   password: string;

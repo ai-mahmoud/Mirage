@@ -15,10 +15,15 @@ import { PrivacyPage } from "@/features/privacy/privacy-page";
 import { PricingPage } from "@/features/pricing/pricing-page";
 import { SettingsPage } from "@/features/settings/settings-page";
 import { NotFoundPage } from "@/features/shared/not-found-page";
+import { PrivacyPolicyPage } from "@/features/legal/privacy-policy-page";
+import { TermsOfServicePage } from "@/features/legal/terms-of-service-page";
 
 export const router = createBrowserRouter(
   [
     { path: "/", element: <LandingPage /> },
+    // Public — readable before signing up, no auth/dashboard chrome.
+    { path: "/legal/privacy-policy", element: <PrivacyPolicyPage /> },
+    { path: "/legal/terms-of-service", element: <TermsOfServicePage /> },
     {
       element: <AuthLayout />,
       children: [

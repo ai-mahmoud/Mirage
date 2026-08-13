@@ -22,6 +22,8 @@ A `Config` is a frozen bundle of settings the rest of the service reads:
     frontend_base_url    - String, the deployed frontend's origin —
                             checkout/portal success & cancel redirects
                             point back here
+    retention_days       - int, how many days a session is kept before
+                            scripts/purge_expired_sessions.py deletes it
 
 Nothing below this module re-reads `os.environ` directly — tests build a
 `Config` by hand instead of touching the process environment.
@@ -66,6 +68,7 @@ class Config:
     stripe_webhook_secret: str = ""
     stripe_price_id_pro: str = ""
     frontend_base_url: str = "http://localhost:5173"
+    retention_days: int = 90
 
 
 def load_config() -> Config:
@@ -89,6 +92,7 @@ def load_config() -> Config:
         stripe_webhook_secret=os.environ.get("BACKEND_STRIPE_WEBHOOK_SECRET", ""),
         stripe_price_id_pro=os.environ.get("BACKEND_STRIPE_PRICE_ID_PRO", ""),
         frontend_base_url=os.environ.get("BACKEND_FRONTEND_BASE_URL", "http://localhost:5173"),
+        retention_days=int(os.environ.get("BACKEND_RETENTION_DAYS", "90")),
     )
 
 

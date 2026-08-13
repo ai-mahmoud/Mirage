@@ -47,6 +47,9 @@ class FakeAiClient:
     def get_snapshot(self, ai_session_id: str) -> dict:
         return self._snapshot_for(ai_session_id)
 
+    def delete_session(self, ai_session_id: str) -> None:
+        self._sessions.pop(ai_session_id, None)
+
     def get_report(self, ai_session_id: str) -> dict:
         snapshot = self._snapshot_for(ai_session_id)
         return {

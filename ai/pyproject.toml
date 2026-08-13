@@ -2,6 +2,7 @@
 name = "mirage-ai"
 version = "0.1.0"
 description = "Mirage AI service — explainable behavioral intelligence engine (evidence synthesis, Trust DNA, decision confidence)"
+license = { text = "Proprietary" }
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.110",

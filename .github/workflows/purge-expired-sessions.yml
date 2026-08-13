@@ -1,0 +1,31 @@
+name: Purge expired sessions
+
+# Phase 7's data-retention job (backend/scripts/purge_expired_sessions.py),
+# run on a schedule instead of via any paid cron infra — GitHub Actions'
+# scheduled workflows are free for a public repo, which is what this
+# deployment stays on for now (see the production-readiness roadmap).
+on:
+  schedule:
+    - cron: "0 4 * * *" # daily at 04:00 UTC
+  workflow_dispatch: {} # manual trigger, for testing this workflow itself
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install backend/ dependencies
+        working-directory: backend
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -e .
+      - name: Purge sessions older than the retention window
+        working-directory: backend
+        env:
+          BACKEND_DATABASE_URL: ${{ secrets.BACKEND_DATABASE_URL }}
+          AI_SERVICE_URL: ${{ secrets.AI_SERVICE_URL }}
+          BACKEND_RETENTION_DAYS: ${{ vars.BACKEND_RETENTION_DAYS }}
+        run: .venv/bin/python scripts/purge_expired_sessions.py

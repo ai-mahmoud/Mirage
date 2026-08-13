@@ -11,6 +11,7 @@ export function SignupPage() {
   const [orgName, setOrgName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
+  const [agreed, setAgreed] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const { signup } = useAuth();
@@ -67,9 +68,33 @@ export function SignupPage() {
             autoComplete="new-password"
           />
         </div>
+
+        <label htmlFor="agreeToTerms" className="flex items-start gap-2.5 text-xs text-charcoal-600">
+          <input
+            id="agreeToTerms"
+            type="checkbox"
+            required
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 size-4 shrink-0 rounded border-charcoal-300 text-nile-800 focus-visible:outline-nile-700"
+          />
+          <span>
+            I agree to the{" "}
+            <Link to="/legal/terms-of-service" target="_blank" className="font-medium text-nile-700 hover:underline">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link to="/legal/privacy-policy" target="_blank" className="font-medium text-nile-700 hover:underline">
+              Privacy Policy
+            </Link>
+            , and I confirm I will inform interview candidates that behavioral interaction metadata is
+            collected during a session before it starts.
+          </span>
+        </label>
+
         <FieldError>{error ?? undefined}</FieldError>
 
-        <Button type="submit" className="w-full gap-2" disabled={loading}>
+        <Button type="submit" className="w-full gap-2" disabled={loading || !agreed}>
           {loading ? <Loader2 className="size-4 animate-spin" /> : <UserPlus className="size-4" />}
           {loading ? "Creating workspace..." : "Create Workspace"}
         </Button>

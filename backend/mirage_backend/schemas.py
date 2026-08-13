@@ -90,6 +90,27 @@ class RedirectUrlResponse(ApiModel):
     url: str
 
 
+# --- Legal / consent (Phase 7) ------------------------------------------
+
+
+class ConsentRequest(ApiModel):
+    """A ConsentRequest records acceptance of one legal document. Must
+    name the document's *current* version (see legal.py) — the frontend
+    always sends legal.CURRENT_VERSIONS' matching constant, never a
+    version the user themselves picked."""
+
+    document: Literal["terms_of_service", "privacy_policy", "session_tracking_notice"]
+    version: str
+
+
+class ConsentResponse(ApiModel):
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True, from_attributes=True)
+
+    document: str
+    version: str
+    accepted_at: datetime
+
+
 # --- Session -----------------------------------------------------------
 
 

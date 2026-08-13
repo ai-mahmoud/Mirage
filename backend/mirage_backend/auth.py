@@ -17,7 +17,9 @@ import bcrypt
 import jwt
 from sqlalchemy.orm import Session as DBSession
 
+from . import consent_service
 from .database import Organization, User, new_id
+from .legal import CURRENT_VERSIONS
 
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_SECONDS = 60 * 60 * 24 * 7  # 7 days
@@ -90,6 +92,15 @@ def signup(db: DBSession, org_name: str, email: str, password: str) -> User:
     "owner"). Raises EmailAlreadyRegistered if the email is already taken
     — email is globally unique across all organizations (see database.py's
     User.email unique constraint), not just within one org.
+
+    Also records acceptance of every current legal document (see
+    legal.py) for the new user — the frontend's signup form gates
+    submission on a single "I agree to the Terms of Service, Privacy
+    Policy, and confirm I'll disclose behavioral tracking to interview
+    candidates" checkbox (see CLAUDE.md's product constitution and
+    Phase 7's session_tracking_notice), so account creation and that
+    acceptance are the same event, not two separate gates a user could
+    create sessions in between.
     """
     existing = db.query(User).filter(User.email == email).first()
     if existing is not None:
@@ -108,6 +119,15 @@ def signup(db: DBSession, org_name: str, email: str, password: str) -> User:
     )
     db.add(user)
     db.commit()
+    db.refresh(user)
+
+    for document, version in CURRENT_VERSIONS.items():
+        consent_service.record_consent(db, user.user_id, document, version)
+
+    # record_consent's own commits (expire_on_commit's default behavior)
+    # expire every attribute this Session is tracking, `user` included —
+    # re-load it so the object handed back to the caller has its
+    # attributes already populated rather than expired-and-detachable.
     db.refresh(user)
     return user
 
