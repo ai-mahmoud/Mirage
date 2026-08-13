@@ -101,3 +101,39 @@ def test_every_outgoing_request_carries_the_current_request_id():
         _request_id.reset(token)
 
     assert seen_headers == ["test-correlation-id-123"]
+
+
+def test_delete_session_sends_delete_request():
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append((request.method, request.url.path))
+        return httpx.Response(200, json={"status": "deleted", "session_id": "abc123"})
+
+    client = _client(handler)
+    client.delete_session("abc123")
+    assert calls == [("DELETE", "/sessions/abc123")]
+
+
+def test_delete_session_treats_404_as_success():
+    """A session already gone from ai/ (e.g. a retry) is the end state
+    deletion wants — must not raise."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "not found"})
+
+    client = _client(handler)
+    client.delete_session("already-gone")  # should not raise
+
+
+def test_delete_session_raises_on_a_real_server_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, json={"detail": "boom"})
+
+    client = _client(handler)
+    try:
+        client.delete_session("abc123")
+    except httpx.HTTPStatusError:
+        pass
+    else:
+        raise AssertionError("expected HTTPStatusError")
