@@ -139,12 +139,24 @@ def test_build_report_caches_executive_summary(db, ai, user_a):
     assert db.get(type(row), row.session_id).executive_summary == "Fake summary."
 
 
+def test_build_report_reports_backends_own_session_id_not_ais(db, ai, user_a):
+    # ai/'s SessionReport.sessionId is ai/'s own internal id (row.ai_session_id
+    # here) — build_report must override it with backend's own session_id,
+    # or any client using report["sessionId"] to address this session
+    # through backend's own routes (e.g. the PDF-download URL) 404s.
+    row = _create(db, ai, user_a)
+    assert row.ai_session_id != row.session_id  # the fixture must actually exercise the distinct-ids case
+    report = session_service.build_report(db, ai, row.session_id, user_a.org_id)
+    assert report["sessionId"] == row.session_id
+
+
 def test_report_out_returns_structured_report(db, ai, user_a):
     row = _create(db, ai, user_a)
     report = session_service.report_out(db, ai, row.session_id, user_a.org_id)
     assert report.executive_summary == "Fake summary."
     assert len(report.trust_dna.dimensions) == 6
     assert report.privacy_statement
+    assert report.session_id == row.session_id
 
 
 def test_list_sessions_returns_all_most_recent_first(db, ai, user_a):

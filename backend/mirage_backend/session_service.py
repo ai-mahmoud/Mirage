@@ -255,6 +255,14 @@ def build_report(db: DBSession, ai: AiClient, session_id: str, org_id: str) -> d
     """
     row = _get_or_raise(db, session_id, org_id)
     report = ai.get_report(row.ai_session_id)
+    # ai/'s SessionReport.sessionId is ai/'s own internal session id, not
+    # backend's — every route a client fetches a session by (including
+    # this one) is keyed by backend's session_id, so that's what any
+    # "sessionId" a client sees must mean too. Without this, a client
+    # that reuses report.sessionId (e.g. to build a PDF-download URL)
+    # gets ai/'s id instead and 404s against backend's own /sessions/*
+    # routes, which is exactly the bug this line fixes.
+    report["sessionId"] = row.session_id
     row.executive_summary = report["executiveSummary"]
     db.commit()
     return report
